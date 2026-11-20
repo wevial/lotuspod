@@ -287,7 +287,7 @@ class OwnerTests(CommentsTestCase):
     def assertOwner(self, name: str, handle: str) -> None:
         page = read(self.page(name))
         self.assertEqual(page.meta.get("lotuspod:owner"), handle)
-        self.assertEqual(text(page.owner), f"Published by {handle}")
+        self.assertEqual(text(page.owner), f"by {handle}")
 
     def test_a_credential_that_may_publish_as_the_handle_stamps_it(self):
         token = self.credential("hermes", ["hermes"], ["publish", "reply"])

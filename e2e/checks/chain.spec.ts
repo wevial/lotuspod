@@ -133,7 +133,7 @@ test.describe('the chain', () => {
 
     await test.step('2. the reader answers the decision and comments on the second section', async () => {
       await page.goto(`${PAGE}?standalone`);
-      await expect(page.getByText(`Published by ${OWNER}`)).toBeVisible();
+      await expect(page.locator('header .artifact-owner', { hasText: `by ${OWNER}` })).toBeVisible();
       const question = decision(page);
       await question.option('Submerged').check();
       await question.addNote.click();
@@ -272,7 +272,7 @@ test.describe('the chain', () => {
       await expect(page).toHaveURL(new RegExp(`/#tabs=${NAME}&on=${NAME}$`));
       const framed = page.frameLocator('iframe.pod-frame--active');
       await expect(framed.getByText(REVISED)).toBeVisible();
-      await expect(framed.getByText(`Published by ${OWNER}`)).toBeVisible();
+      await expect(framed.locator('header .artifact-owner', { hasText: `by ${OWNER}` })).toBeVisible();
       const question = decision(framed);
       await expect(question.saved).toContainText('Saved \u00b7 Submerged \u00b7 change');
       await expect(question.savedNote).toHaveText(NOTE);

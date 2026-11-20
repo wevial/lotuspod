@@ -290,7 +290,7 @@ class ServedSiteTests(CaptureSiteTestCase):
         seen = json.loads(self.record.read_text(encoding="utf-8"))
         status, page = seen["page"]
         self.assertEqual(status, 200)
-        self.assertIn("Published by hermes", page)
+        self.assertIn('<p class="artifact-owner">by hermes</p>', page)
         self.assertIn('<meta name="lotuspod:revision"', page)
         self.assertEqual(page.count('<details class="artifact-comment" data-page="capture-passages"'), 4)
         self.assertEqual(page.count('<form class="artifact-decision"'), 1)
@@ -434,7 +434,7 @@ class AgentSocketTests(CaptureSiteTestCase):
 
         status, page = seen["/capture-owned.html"]
         self.assertEqual(status, 200)
-        self.assertIn("Published by hermes", page)
+        self.assertIn('<p class="artifact-owner">by hermes</p>', page)
         self.assertEqual(page.count('<form class="artifact-decision"'), 1)
         self.assertIn('data-section="pump"', page)
         self.assertIn('data-section="heater"', page)

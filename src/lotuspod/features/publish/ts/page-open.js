@@ -632,3 +632,264 @@
   }
 
   var foldSection = foldSections(all("div.artifact-section-body"));
+
+  // The outline's pin: on a wide page the outline is a handle that opens
+  // over the margin, and pinned it is a column beside the body
+  // (core/theme/base.css), as data-outline="pinned" on the root. The choice
+  // is kept in this browser under OUTLINE; storage that refuses or throws
+  // reads as not pinned. Unpinned, hover and keyboard focus open the handle
+  // by CSS; here a tap opens it too (OPEN), as a touch screen has no hover,
+  // Escape closes it where the pointer and focus stay (DISMISSED), and the
+  // disclosure's open state follows what shows, so its summary reports it.
+  // A touch marks the outline (TOUCHED) until a mouse moves, as the hover a
+  // tap leaves behind is not a pointer over the handle.
+  var OUTLINE = "lotuspod:outline";
+  var OPEN = "artifact-outline--open";
+  var DISMISSED = "artifact-outline--dismissed";
+  var TOUCHED = "artifact-outline--touched";
+
+  function pinOutline() {
+    var outline = document.querySelector("nav.artifact-outline");
+    var disclosure = outline && outline.querySelector("details.artifact-outline-disclosure");
+    var summary = disclosure && disclosure.querySelector(":scope > summary");
+    if (!summary) {
+      return;
+    }
+    var root = document.documentElement;
+    var pinned = false;
+    try {
+      pinned = localStorage.getItem(OUTLINE) === "pinned";
+    } catch (ignored) {
+      pinned = false;
+    }
+    var pin = element("button", "artifact-outline-pin");
+    pin.type = "button";
+    pin.setAttribute("aria-label", "Pin outline");
+    var NS = "http://www.w3.org/2000/svg";
+    var icon = document.createElementNS(NS, "svg");
+    icon.setAttribute("viewBox", "0 0 16 16");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+    var path = document.createElementNS(NS, "path");
+    path.setAttribute("d", "M6 2h4M7 2.5v4L4.5 9.5h7L9 6.5v-4M8 9.5V14");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.5");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    icon.appendChild(path);
+    pin.appendChild(icon);
+    // Just after the summary, so Tab reaches it from the handle and the
+    // last link still leads straight to Collapse all and on to the body.
+    disclosure.insertBefore(pin, summary.nextSibling);
+
+    // The handle and its panel are the wide layout's alone: narrow, the
+    // disclosure is the reader's, as it was.
+    function wide() {
+      return getComputedStyle(outline).position === "sticky";
+    }
+
+    // Focus shown in the outline, asked of the focused element itself: a
+    // browser without :has() throws on it in matches().
+    function focused() {
+      var active = document.activeElement;
+      return !!active && outline.contains(active) && active.matches(":focus-visible");
+    }
+
+    function shown() {
+      return !outline.classList.contains(DISMISSED) &&
+        (outline.matches(":hover:not(." + TOUCHED + "), ." + OPEN) || focused());
+    }
+
+    // Wide, the disclosure is open whenever the list shows, pinned or not:
+    // where ::details-content is not understood that is what shows it.
+    // Narrow, it is as the reader last left it there.
+    var own = disclosure.open;
+    disclosure.addEventListener("toggle", function () {
+      if (!wide()) {
+        own = disclosure.open;
+      }
+    });
+
+    // How far the open panel is raised so it ends GAP above the window's
+    // bottom: every entry in view, and the page no longer. It still covers
+    // the closed handle's whole box, its border and a rounded pixel too, so
+    // a pointer resting anywhere on it stays over it rather than closing it
+    // and finding the handle under it again.
+    var GAP = 16;
+    function fit() {
+      var lift = 0;
+      if (wide() && !pinned && shown()) {
+        var raised = parseFloat(outline.style.getPropertyValue("--outline-lift")) || 0;
+        var bottom = outline.getBoundingClientRect().top + raised + outline.offsetHeight;
+        var view = document.documentElement.clientHeight;
+        var handle = Math.min(
+          Math.ceil(summary.getBoundingClientRect().bottom + raised + outline.clientTop) + 1, view);
+        lift = Math.max(0, Math.min(bottom - (view - GAP), bottom - handle));
+      }
+      outline.style.setProperty("--outline-lift", lift + "px");
+    }
+
+    // The disclosure opens before the panel is measured: where
+    // ::details-content is not understood, it is what gives the list height.
+    function sync() {
+      var open = wide() ? pinned || shown() : own;
+      if (disclosure.open !== open) {
+        disclosure.open = open;
+      }
+      fit();
+    }
+
+    function show() {
+      if (pinned) {
+        root.setAttribute("data-outline", "pinned");
+      } else {
+        root.removeAttribute("data-outline");
+      }
+      pin.setAttribute("aria-pressed", String(pinned));
+    }
+
+    var pointer = "";
+    summary.addEventListener("pointerdown", function (event) {
+      pointer = event.pointerType;
+    });
+    summary.addEventListener("click", function (event) {
+      if (!wide()) {
+        return;
+      }
+      // Wide, the summary opens nothing itself: a tap opens or closes the
+      // panel, and a key or a click reopens one Escape closed.
+      event.preventDefault();
+      outline.classList.remove(DISMISSED);
+      if (pointer === "touch" || pointer === "pen") {
+        outline.classList.toggle(OPEN);
+      }
+      pointer = "";
+      sync();
+    });
+    outline.addEventListener("pointerenter", sync);
+    outline.addEventListener("pointerleave", function () {
+      // Focus still shown in it keeps an Escape standing.
+      if (!focused()) {
+        outline.classList.remove(DISMISSED);
+      }
+      sync();
+    });
+    outline.addEventListener("focusin", function (event) {
+      // Focus arriving from outside opens what an Escape closed.
+      if (!outline.contains(event.relatedTarget)) {
+        outline.classList.remove(DISMISSED);
+      }
+      if (event.target.matches(":focus-visible")) {
+        outline.classList.add(OPEN);
+      }
+      sync();
+    });
+    outline.addEventListener("focusout", function (event) {
+      if (!outline.contains(event.relatedTarget)) {
+        outline.classList.remove(OPEN, DISMISSED);
+        setTimeout(sync, 0);
+      }
+    });
+    // A tap elsewhere closes a panel a tap opened, as does a tap on a link
+    // in it once the link has been followed. A tap inside a panel the mouse
+    // opened keeps it open, so the control tapped is still there to take it.
+    document.addEventListener("pointerdown", function (event) {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        if (wide() && !pinned && outline.contains(event.target) && !summary.contains(event.target) &&
+            shown()) {
+          outline.classList.add(OPEN);
+        }
+        outline.classList.add(TOUCHED);
+      }
+      if (!outline.contains(event.target) && outline.classList.contains(OPEN)) {
+        outline.classList.remove(OPEN);
+        sync();
+      }
+    });
+    // A pen that hovers clear of the screen is a pointer over what it hovers.
+    document.addEventListener("pointermove", function (event) {
+      var hovering = event.pointerType === "mouse" || (event.pointerType === "pen" && event.buttons === 0);
+      if (hovering && outline.classList.contains(TOUCHED)) {
+        outline.classList.remove(TOUCHED);
+        sync();
+      }
+    });
+    window.addEventListener("resize", sync);
+    window.addEventListener("scroll", fit, { passive: true });
+    // Its entries changed in place, or the header above it (a live
+    // republish), the open panel is raised again for its new height and
+    // place. Asked as the page changes, before the next frame, the panel is
+    // still under the pointer that opened it: refitted later, a shorter
+    // panel left at the old lift would have moved off the pointer and
+    // closed. The lift is a translate, so fitting resizes nothing, and a
+    // style is no change watched here, so it does not call itself.
+    if (window.MutationObserver) {
+      new MutationObserver(function () {
+        if (!pinned && shown()) {
+          fit();
+        }
+      }).observe(outline.closest("main") || document.body,
+        { childList: true, subtree: true, characterData: true });
+    }
+    if (window.ResizeObserver) {
+      new ResizeObserver(fit).observe(outline);
+    }
+    outline.addEventListener("click", function (event) {
+      if (event.target.closest("a") && !event.target.matches(":focus-visible")) {
+        outline.classList.remove(OPEN);
+        setTimeout(sync, 0);
+      }
+    });
+    document.addEventListener("keydown", function (event) {
+      if (!wide() || pinned) {
+        return;
+      }
+      if (event.key === "Escape" && shown()) {
+        if (outline.contains(document.activeElement)) {
+          summary.focus({ preventScroll: true });
+        }
+        outline.classList.remove(OPEN);
+        outline.classList.add(DISMISSED);
+        sync();
+      } else if (event.key === "Tab" && outline.contains(document.activeElement)) {
+        outline.classList.remove(DISMISSED);
+        sync();
+      }
+    });
+
+    function repin(now) {
+      pinned = now;
+      show();
+      sync();
+      // The body moved: what is measured against it (the tables' room up to
+      // the comments panel) is measured again, as on a resize.
+      window.dispatchEvent(new Event("resize"));
+    }
+
+    pin.addEventListener("click", function () {
+      var now = !pinned;
+      try {
+        if (now) {
+          localStorage.setItem(OUTLINE, "pinned");
+        } else {
+          localStorage.removeItem(OUTLINE);
+        }
+      } catch (ignored) {
+        // Storage refused: the outline still pins, only unremembered.
+      }
+      repin(now);
+    });
+    // A pin pressed in another open page of this browser (a tab of the
+    // index) holds here too. A cleared storage clears it as well.
+    window.addEventListener("storage", function (event) {
+      if ((event.key === OUTLINE || event.key === null) &&
+          (event.newValue === "pinned") !== pinned) {
+        repin(event.newValue === "pinned");
+      }
+    });
+    show();
+    sync();
+  }
+
+  pinOutline();

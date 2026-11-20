@@ -148,7 +148,7 @@ test.describe('signed in', () => {
         await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       });
       before = await top();
-      expect.soft(await page.locator('header.artifact-header > p.artifact-meta + details.artifact-comment[data-section=""] > summary')
+      expect.soft(await page.locator('header.artifact-header > p.artifact-meta + p.artifact-owner + details.artifact-comment[data-section=""] > summary')
         .allTextContents(), 'the served header contains the whole-page comment box').toEqual(['Comment']);
     } finally {
       release();
@@ -182,7 +182,7 @@ test.describe('signed in', () => {
     try {
       const plain = await context.newPage();
       await plain.goto(new URL(`/${name}.html?standalone`, page.url()).href);
-      await expect(plain.locator('header.artifact-header > p.artifact-meta + details.artifact-comment[data-section=""] > summary'))
+      await expect(plain.locator('header.artifact-header > p.artifact-meta + p.artifact-owner + details.artifact-comment[data-section=""] > summary'))
         .toHaveText('Comment');
       await plain.evaluate(() => document.fonts.ready);
       const plainTop = await plain.locator('.artifact-main')
@@ -226,12 +226,13 @@ test.describe('signed in', () => {
     const risks = box(page, 'risks');
     await expect(page.locator('header.artifact-header > details.artifact-comment[data-section=""]'))
       .toHaveCount(1);
-    // Right after the date line; the owner's Archive control is in the top bar, not the header.
+    // After the date line and the owner; the owner's Archive control is in the top bar, not the header.
     const archive = page.locator('.artifact-topbar > span.artifact-archive-bar > button.artifact-archive');
     await expect(archive).toHaveText('Archive');
     await expect(page.locator('header.artifact-header button.artifact-archive')).toHaveCount(0);
     expect(await whole.details.evaluate((node) =>
-      node.previousElementSibling?.classList.contains('artifact-meta'))).toBe(true);
+      node.previousElementSibling?.matches('p.artifact-owner') &&
+      node.previousElementSibling.previousElementSibling?.classList.contains('artifact-meta'))).toBe(true);
     await expect(whole.chip).toHaveText('No comments · Comment on this page');
     await expect(goals.chip).toHaveText('No comments · Comment');
 

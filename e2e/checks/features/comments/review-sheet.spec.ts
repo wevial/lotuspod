@@ -126,6 +126,8 @@ test.describe('signed in', () => {
     const the = sheet(page);
     await expect(the.count).toHaveText('7 to answer');
     await expect(the.next).toBeVisible();
+    // On a wide page the outline's links are in the panel its handle opens.
+    await page.locator('nav.artifact-outline .artifact-outline-summary').hover();
     for (const [name, open] of [['Who reviews', 2], ['When a review blocks', 2], ['Prompt rules', 1], ['Rollout', 2]] as const) {
       await expect(the.outline(name).locator('.artifact-review-outline')).toBeVisible();
       await expect(the.outline(name).locator('.artifact-review-outline-number')).toHaveText(String(open));

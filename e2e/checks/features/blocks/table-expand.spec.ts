@@ -41,7 +41,20 @@ type Box = { left: number; right: number; top: number; bottom: number; width: nu
 
 test.use({ extraHTTPHeaders: SIGNED_IN });
 
+// These checks were written against the outline pinned as a column beside
+// the body (core/theme/base.css), the layout they measure.
+function pinOutline(page: Page) {
+  return page.addInitScript(() => {
+    try {
+      localStorage.setItem('lotuspod:outline', 'pinned');
+    } catch {
+      // A frame that may keep nothing keeps the handle.
+    }
+  });
+}
+
 async function load(page: Page, target: Target) {
+  await pinOutline(page);
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: target.slug, threads: [] } }));
   await page.goto(`${target.url}?standalone`);
@@ -444,6 +457,13 @@ test(`${REPORT.slug} at 3440x1440: the buttons take no room`, async ({ browser }
     const page = await context.newPage();
     await page.route((url) => url.pathname === '/api/comments', (route) =>
       route.fulfill({ json: { page: REPORT.slug, threads: [] } }));
+    // A page without scripts cannot read the pin: both are served pinned.
+    await page.route((url) => url.pathname === REPORT.url, async (route) => {
+      const response = await route.fetch();
+      const html = (await response.text()).replace('<html lang="en">', '<html lang="en" data-outline="pinned">');
+      await route.fulfill({ response, body: html });
+    });
+    if (javaScriptEnabled) await pinOutline(page);
     await page.goto(`${REPORT.url}?standalone`);
     await expect(page.locator('.artifact-body table')).toHaveCount(7);
     if (javaScriptEnabled) {

@@ -8,6 +8,22 @@ import { expect, test, type Page } from '@playwright/test';
 const MEDIUM = { width: 1024, height: 768 };
 test.use({ viewport: MEDIUM });
 
+// These checks were written against the outline pinned as a column beside
+// the body (core/theme/base.css), the layout they measure.
+function pinOutline(page: Page) {
+  return page.addInitScript(() => {
+    try {
+      localStorage.setItem('lotuspod:outline', 'pinned');
+    } catch {
+      // A frame that may keep nothing keeps the handle.
+    }
+  });
+}
+
+test.beforeEach(async ({ page }) => {
+  await pinOutline(page);
+});
+
 // The capture fixture's sections page: an intro, then three sections, each
 // folding under its heading. The first holds a word no other does and a code
 // block, the second asks one question, and each ends in a comment box. The

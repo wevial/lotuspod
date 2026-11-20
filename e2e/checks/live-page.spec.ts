@@ -4,20 +4,20 @@ import path from 'node:path';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import {
   ASSERTION, CHECK, HERMES, MEDIA_URL, OUT, OWNER, POND, PYTHON, RISKY, SIGNED_IN, SOCKET, attachedIn, banner, box,
-  fallBack, holdUploads, open, pasteFishOnly, pond, publish, refuse, revisionOf, run, sectioned, selectPassage,
-  source, stopClock, watchErrors, watchLoads,
+  fallBack, holdUploads, open, pasteFishOnly, pinOutline, pond, publish, refuse, revisionOf, run, sectioned,
+  selectPassage, source, stopClock, watchErrors, watchLoads,
 } from './live-page-helpers';
 
 // Wide enough for the side panel: a thread opens in it.
 const WIDE = { width: 1440, height: 900 };
 test.use({ viewport: WIDE });
 
+test.beforeEach(({ page }) => pinOutline(page));
+
 // The page reads /api/comments, /api/answers and itself in the background; a
 // read still in a route handler's route.fetch when a check ends would
 // otherwise fail that check with "Test ended".
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'ignoreErrors' });
-});
+test.afterEach(({ page }) => page.unrouteAll({ behavior: 'ignoreErrors' }));
 
 // An open page notices it was published again. Each check publishes a page
 // of its own on the capture fixture's site with a real `lotuspod publish`,

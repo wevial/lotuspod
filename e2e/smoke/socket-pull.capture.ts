@@ -25,7 +25,7 @@ test('a reader comment reaches the agent through its socket pull', async ({ page
   }
   pull(); // Register the listening handle before the reader comments.
   await page.goto('/capture-owned.html?standalone');
-  await expect(page.getByText('Published by hermes')).toBeVisible();
+  await expect(page.locator('header .artifact-owner', { hasText: 'by hermes' })).toBeVisible();
   await page.locator('details.artifact-comment[data-section="heater"] > summary').click();
   const group = page.locator('.artifact-comments-group').filter({
     has: page.locator('.artifact-comments-group-title', { hasText: 'Heater' }),
