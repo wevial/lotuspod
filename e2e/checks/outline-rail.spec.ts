@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { CHECK, stopClock } from './live-page-helpers';
 
 // The outline on a wide page (core/theme/base.css, features/publish/ts/
 // page-open.js): a handle in the left gutter that opens over the margin on
@@ -606,6 +607,43 @@ test('where ::details-content is not understood, the first hover in a short wind
     expect(at.top).toBeGreaterThanOrEqual(0);
     expect(at.bottom).toBeLessThanOrEqual(SHORT.height);
   }
+  expect(errors).toEqual([]);
+});
+
+test('in a short wide window a live republish that adds entries raises the open outline again', async ({ page }) => {
+  const name = 'outline-rail-live';
+  const sections = (count: number) => [`# Outline rail live`, '', 'The pond, in winter.', '',
+    ...['Pump', 'Heater', 'Fish', 'Ice', 'Reeds', 'Thaw'].slice(0, count)
+      .flatMap((heading) => [`## ${heading}`, '', `${heading}: what the frost asks of it.`, ''])].join('\n');
+  publish(name, sections(2));
+  const SHORT = { width: 1280, height: 330 };
+  await page.setViewportSize(SHORT);
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.fulfill({ json: { page: name, threads: [] } }));
+  await stopClock(page);
+  const errors = await open(page, `/${name}.html?standalone`);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const handle = await rect(outline.locator('.artifact-outline-summary'));
+  expect(handle.bottom).toBeLessThan(SHORT.height);
+  await page.mouse.move(handle.left + handle.width / 2, handle.top + handle.height / 2);
+  await expect(list).toBeVisible();
+
+  // The swap comes in while the pointer rests on the open panel.
+  publish(name, sections(6));
+  await page.clock.runFor(CHECK);
+  await expect(list.getByRole('link')).toHaveCount(6);
+  await expect(list).toBeVisible();
+  await expect.poll(async () => (await rect(outline)).bottom).toBeLessThanOrEqual(SHORT.height);
+  // Every entry within the window, or within the panel's own scrolling.
+  const panel = await rect(outline);
+  expect(panel.top).toBeGreaterThanOrEqual(0);
+  const last = list.getByRole('link').last();
+  await last.evaluate((node) => node.scrollIntoView({ block: 'nearest' }));
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  const at = await rect(last);
+  expect(at.top).toBeGreaterThanOrEqual(panel.top);
+  expect(at.bottom).toBeLessThanOrEqual(SHORT.height);
   expect(errors).toEqual([]);
 });
 

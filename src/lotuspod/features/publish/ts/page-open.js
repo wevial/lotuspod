@@ -815,6 +815,12 @@
     });
     window.addEventListener("resize", sync);
     window.addEventListener("scroll", fit, { passive: true });
+    // Its entries changed in place (a live republish), the open panel is
+    // raised again for its new height. The lift is a translate, so fitting
+    // resizes nothing and does not call itself.
+    if (window.ResizeObserver) {
+      new ResizeObserver(fit).observe(outline);
+    }
     outline.addEventListener("click", function (event) {
       if (event.target.closest("a") && !event.target.matches(":focus-visible")) {
         outline.classList.remove(OPEN);
