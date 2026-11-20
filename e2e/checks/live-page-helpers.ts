@@ -117,6 +117,18 @@ export async function refuse(page: Page) {
     route.fulfill({ status: 503, contentType: 'application/json', body: '{"error": "too_many_streams"}' }));
 }
 
+// These checks measure the outline pinned as a column beside the body
+// (core/theme/base.css).
+export function pinOutline(page: Page) {
+  return page.addInitScript(() => {
+    try {
+      localStorage.setItem('lotuspod:outline', 'pinned');
+    } catch {
+      // A frame that may keep nothing keeps the handle.
+    }
+  });
+}
+
 // Open the page and let its first read of the threads come back.
 export async function open(page: Page, name: string) {
   const read = page.waitForResponse((response) =>

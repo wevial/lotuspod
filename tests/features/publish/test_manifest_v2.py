@@ -431,12 +431,9 @@ class ArtifactTopbarTests(TempDirTestCase):
         self.assertIn("top: calc(var(--topbar-height) + 1.5rem);", outline.group(1))
         self.assertNotIn("top: 1.5rem;", outline.group(1))
         # Pinned as a rail, it is no taller than the window below the bar.
-        pinned = re.search(r':root\[data-outline="pinned"\] \.artifact-outline \{(.*?)\n  \}',
-                           wide, re.DOTALL)
-        self.assertIsNotNone(pinned)
-        self.assertIn(
-            "max-height: calc(100vh - var(--topbar-height) - 3rem);", pinned.group(1)
-        )
+        pinned = wide.split(':root[data-outline="pinned"] .artifact-outline {\n', 1)[1]
+        self.assertIn("max-height: calc(100vh - var(--topbar-height) - 3rem);",
+                      pinned.split("\n  }", 1)[0])
 
     def test_markup_differs_from_before_only_in_the_theme_version(self):
         """KO-236 is CSS alone: the page markup is untouched."""
@@ -1265,14 +1262,9 @@ class OutlineThemeTests(unittest.TestCase):
 
     def test_the_rail_sits_on_the_left_and_the_body_on_the_right(self):
         """KO-234: navigation comes before content in reading order."""
-        self.assertIn(
-            "grid-template-columns: var(--outline-handle) minmax(0, 1fr);",
-            self.rule(".artifact-main:has(.artifact-outline)"),
-        )
-        self.assertIn(
-            "grid-template-columns: var(--outline-rail) minmax(0, 1fr);",
-            self.rule(':root[data-outline="pinned"] .artifact-main:has(.artifact-outline)'),
-        )
+        for width, prefix in (("handle", ""), ("rail", ':root[data-outline="pinned"] ')):
+            self.assertIn(f"grid-template-columns: var(--outline-{width}) minmax(0, 1fr);",
+                          self.rule(f"{prefix}.artifact-main:has(.artifact-outline)"))
         self.assertIn(
             "grid-area: 1 / 2;",
             self.rule(".artifact-main:has(.artifact-outline) > .artifact-body"),
