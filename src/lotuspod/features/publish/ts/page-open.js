@@ -689,9 +689,16 @@
       return getComputedStyle(outline).position === "sticky";
     }
 
+    // Focus shown in the outline, asked of the focused element itself: a
+    // browser without :has() throws on it in matches().
+    function focused() {
+      var active = document.activeElement;
+      return !!active && outline.contains(active) && active.matches(":focus-visible");
+    }
+
     function shown() {
       return !outline.classList.contains(DISMISSED) &&
-        outline.matches(":hover:not(." + TOUCHED + "), ." + OPEN + ", :has(:focus-visible)");
+        (outline.matches(":hover:not(." + TOUCHED + "), ." + OPEN) || focused());
     }
 
     // Wide, the disclosure is open whenever the list shows, pinned or not:
@@ -751,7 +758,7 @@
     outline.addEventListener("pointerenter", sync);
     outline.addEventListener("pointerleave", function () {
       // Focus still shown in it keeps an Escape standing.
-      if (!outline.matches(":has(:focus-visible)")) {
+      if (!focused()) {
         outline.classList.remove(DISMISSED);
       }
       sync();
@@ -773,9 +780,14 @@
       }
     });
     // A tap elsewhere closes a panel a tap opened, as does a tap on a link
-    // in it once the link has been followed.
+    // in it once the link has been followed. A tap inside a panel the mouse
+    // opened keeps it open, so the control tapped is still there to take it.
     document.addEventListener("pointerdown", function (event) {
       if (event.pointerType === "touch" || event.pointerType === "pen") {
+        if (wide() && !pinned && outline.contains(event.target) && !summary.contains(event.target) &&
+            shown()) {
+          outline.classList.add(OPEN);
+        }
         outline.classList.add(TOUCHED);
       }
       if (!outline.contains(event.target) && outline.classList.contains(OPEN)) {

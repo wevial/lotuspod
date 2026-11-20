@@ -52,7 +52,8 @@ rail beside the reading column instead (a full-width table then stops at the
 rail rather than running under it), remembered per browser. On a narrow page it
 is a disclosure card above the prose. The markup ships collapsed, so a phone
 gets the article first and the outline on request. No second copy of the links:
-the layout is a container query away, and the page script adds only the pin.
+the layout is a container query away; the page script adds the pin, and
+Escape and a tap opening or closing the handle.
 
 Pass `--no-outline` to skip the ids and the outline list entirely.
 

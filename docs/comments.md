@@ -1158,7 +1158,7 @@ such as `claude-3f9a2c`). `--owner HANDLE` on `publish` or `render` needs
 both `publish` and HANDLE, checked in serve's database (`--db`, with serve's
 default); otherwise the command exits 1 naming the problem and writes nothing.
 The page carries the handle in a `lotuspod:owner` meta tag and shows
-"Published by HANDLE" in its header.
+"by HANDLE" in its header's meta line.
 
 ```sh
 lotuspod publish pond-plan.md --owner hermes --credential ~/.config/lotuspod/hermes.token

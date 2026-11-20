@@ -17,6 +17,19 @@
   }
   var buttons = [];
 
+  // The outline pinned in this browser (features/publish/ts/page-open.js
+  // keeps it under OUTLINE) is marked on the root while the head parses, so
+  // a pinned page paints its column first, a page without the page script
+  // (an earlier version) included. Storage that refuses or throws reads as
+  // not pinned.
+  try {
+    if (window.localStorage.getItem("lotuspod:outline") === "pinned") {
+      root.setAttribute("data-outline", "pinned");
+    }
+  } catch (error) {
+    // Not pinned.
+  }
+
   // Before the body paints, the root is marked so HIDDEN hides what the
   // reader would see only for a moment: a pod that may leave for its index's
   // tab (the synchronous half of features/publish/ts/open-in-tabs.js, which

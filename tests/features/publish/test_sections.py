@@ -188,9 +188,10 @@ class UnwrappedTests(SectionsTestCase):
                 page = self.render(name, body, *extra, "--hidden")
                 self.assertFalse(any(is_wrapper(node) for node in walk(page.root)))
                 self.assertNotIn(WRAPPER, (self.out_dir / f"{name}.html").read_text())
-                # Only the comment box loads the page script.
+                # Only the comment box, or the outline two headings make
+                # (its pin), loads the page script.
                 loaded = core.PAGE_SCRIPT in [src.split("?")[0] for src in page.scripts]
-                self.assertEqual(loaded, "--comments" in extra)
+                self.assertEqual(loaded, "--comments" in extra or name == "nested")
 
 
 class WrapSectionsTests(unittest.TestCase):

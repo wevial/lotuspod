@@ -323,7 +323,7 @@ test('the handle draws its rules in forced colors, and an authored nav rule pain
   expect(await handle.evaluate((node) => getComputedStyle(node, '::before').backgroundImage)).toContain('linear-gradient');
   await page.emulateMedia({ forcedColors: 'none' });
 
-  await page.addStyleTag({ content: 'nav { background: #224466; }' });
+  await page.addStyleTag({ content: 'nav, nav[aria-label] { background: #224466; }' });
   const ground = () => outline.evaluate((node) => getComputedStyle(node).backgroundColor);
   await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
   expect(await ground()).toBe('rgba(0, 0, 0, 0)');
@@ -417,6 +417,31 @@ test.describe('on a touch screen', () => {
     await expect(list).toBeHidden();
     expect(errors).toEqual([]);
   });
+
+  test('a tap in a panel the mouse opened reaches the entry or the pin tapped', async ({ page }) => {
+    await page.setViewportSize(WIDE);
+    const errors = await open(page);
+    const outline = page.locator('nav.artifact-outline');
+    const list = outline.locator('.artifact-outline-list');
+    const handle = outline.locator('.artifact-outline-summary');
+    await handle.hover();
+    await expect(list).toBeVisible();
+    const entry = list.getByRole('link').last();
+    const href = (await entry.getAttribute('href'))!;
+    await entry.tap();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe(href);
+
+    await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+    await handle.hover();
+    await expect(list).toBeVisible();
+    const pin = outline.getByRole('button', { name: 'Pin outline' });
+    await pin.tap();
+    await expect(pin).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
+    await pin.tap();
+    await expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('without the page script', () => {
@@ -456,5 +481,93 @@ test('pinning measures the tables again, so none runs under the comments panel',
   await page.locator('nav.artifact-outline').getByRole('button', { name: 'Pin outline' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
   await expect.poll(async () => (await widest()) <= (await panel())).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('a browser without :has() in matches() still opens the outline and starts the rest of the page', async ({ page }) => {
+  await page.addInitScript(() => {
+    const matches = Element.prototype.matches;
+    Element.prototype.matches = function (this: Element, selector: string) {
+      if (selector.includes(':has(')) throw new DOMException(`'${selector}' is not a valid selector`, 'SyntaxError');
+      return matches.call(this, selector);
+    };
+  });
+  await page.setViewportSize(WIDE);
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.fulfill({ json: { page: 'capture-owned', threads: [] } }));
+  const errors = await open(page, '/capture-owned.html?standalone');
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const handle = outline.locator('.artifact-outline-summary');
+  // The header's links come first.
+  await page.locator('.artifact-topbar button:visible').last().focus();
+  for (let step = 0; step < 8 && !(await handle.evaluate((node) => node === document.activeElement)); step++) {
+    await page.keyboard.press('Tab');
+  }
+  await expect(handle).toBeFocused();
+  await expect(list).toBeVisible();
+  await expect(outline.locator('details.artifact-outline-disclosure')).toHaveJSProperty('open', true);
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+  await page.locator('.artifact-topbar-title').focus();
+  await expect(list).toBeHidden();
+  // What starts after the outline still starts.
+  await expect(page.locator('header.artifact-header .artifact-versions-link')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('in a short wide window the open outline keeps its handle and entries in view', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 280 });
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  // The pointer moved onto the handle where it is, the page not scrolled.
+  const handle = await rect(outline.locator('.artifact-outline-summary'));
+  expect(handle.bottom).toBeLessThan(280);
+  await page.mouse.move(handle.left + handle.width / 2, handle.top + handle.height / 2);
+  await expect(list).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  const panel = await rect(outline);
+  const first = await rect(list.getByRole('link').first());
+  expect(panel.height).toBeGreaterThan(100);
+  expect(first.bottom).toBeLessThanOrEqual(panel.bottom);
+  expect(first.top).toBeGreaterThanOrEqual(panel.top);
+  expect(errors).toEqual([]);
+});
+
+test('a pin kept in this browser shows the column on a page whose page script does not run', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  await page.addInitScript(() => localStorage.setItem('lotuspod:outline', 'pinned'));
+  await page.route((url) => url.pathname.endsWith('/lotuspod-page.js'), (route) => route.abort());
+  await page.goto(ARTICLE);
+  await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
+  const outline = page.locator('nav.artifact-outline');
+  await expect(outline.locator('.artifact-outline-pin')).toHaveCount(0);
+  const column = await rect(outline);
+  expect(column.width).toBeGreaterThan(200);
+  expect(column.right).toBeLessThanOrEqual((await rect(page.locator('.artifact-body'))).left);
+  await expect(outline.locator('.artifact-outline-summary')).toHaveText('On this page');
+});
+
+test('the Versions and comments links arriving on a phone move nothing below the header', async ({ page }) => {
+  await page.setViewportSize(PHONE);
+  const held: Array<() => Promise<void>> = [];
+  await page.route((url) => url.pathname === '/api/versions', (route) => {
+    const versions = Array.from({ length: 100 }, (_, n) => ({
+      commit: n.toString(16).padStart(12, '0'), date: '2026-01-01T00:00:00Z', current: n === 0 }));
+    held.push(() => route.fulfill({ json: { versions } }));
+  });
+  await page.route((url) => url.pathname === '/api/comments', (route) => {
+    held.push(() => route.fulfill({ json: { page: 'capture-owned', threads: [] } }));
+  });
+  const errors = await open(page, '/capture-owned.html?standalone');
+  const body = page.locator('.artifact-body');
+  const header = page.locator('header.artifact-header');
+  await expect(header.locator('.artifact-owner')).toBeVisible();
+  await expect.poll(() => held.length).toBe(2);
+  const before = (await rect(body)).top;
+  for (const release of held) await release();
+  await expect(header.locator('.artifact-versions-link')).toHaveText('Versions · 100');
+  await expect(header.locator(':scope > details.artifact-comment > summary')).toHaveText('No comments · Comment on this page');
+  expect((await rect(body)).top).toBe(before);
   expect(errors).toEqual([]);
 });

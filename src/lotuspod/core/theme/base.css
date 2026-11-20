@@ -311,8 +311,10 @@ body {
 /* The comments link ends the line, after the owner: the page script
    redraws it as its threads change, and nothing after it moves when it
    does. The room kept for the Versions link, which arrives later, fits
-   "· Versions · 99" rather than the widest link, so the line runs on
-   without a gap. */
+   "· Versions · 200" rather than the versions view's wider slot, so the
+   line runs on without much of a gap; the room kept for the comments link
+   fits it drawn with no comments. Either arriving then moves nothing below
+   it, even where the line wraps. */
 .artifact-header > .artifact-owner {
   order: 1;
 }
@@ -327,7 +329,7 @@ body {
 
 html:has(meta[name="lotuspod:revision"]) header.artifact-header .artifact-meta::after,
 header.artifact-header .artifact-versions-slot {
-  min-width: 6.4em;
+  min-width: 7.1em;
 }
 
 .artifact-header > .artifact-owner::before,
@@ -349,6 +351,7 @@ header.artifact-header > .artifact-comment {
 .artifact-header > .artifact-comment:not([open]) {
   background: none;
   border: 0;
+  min-width: min(18.25em, 100%);
   padding: 0;
 }
 
@@ -544,9 +547,13 @@ header.artifact-header > .artifact-comment {
 
   /* The handle sits above the body and below the title bar (z-index 3), its
      border drawn clear while closed so opening moves nothing under the
-     pointer. Its ground is stated, so an authored nav rule does not paint it. */
-  .artifact-outline {
+     pointer. Its ground is stated, under the root, so an authored nav rule,
+     an attribute's weight in it too, does not paint it. */
+  :root .artifact-outline {
     background: transparent;
+  }
+
+  .artifact-outline {
     border: 1px solid transparent;
     border-radius: var(--radius-block);
     grid-area: 1 / 1;
@@ -562,13 +569,17 @@ header.artifact-header > .artifact-comment {
      screen's, so the grid row keeps the body's height and nothing below it
      moves; the page script's --outline-room, the room from its top to the
      window's bottom, less a gap, its padding and border, keeps it from
-     lengthening the page. Hover left by a tap (the page script's artifact-outline--touched)
+     lengthening the page, though never below the room for the handle and a
+     few entries, in a short window too. Hover left by a tap (the page script's artifact-outline--touched)
      opens nothing. */
   :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) {
     background: var(--color-night);
     border-color: var(--hairline);
     margin-bottom: -100vh;
-    max-height: min(calc(100vh - var(--topbar-height) - 3rem), calc(var(--outline-room, 100vh) - 2.5rem));
+    max-height: max(
+      min(10rem, calc(100vh - var(--topbar-height) - 3rem)),
+      min(calc(100vh - var(--topbar-height) - 3rem), calc(var(--outline-room, 100vh) - 2.5rem))
+    );
     overflow-y: auto;
     padding-bottom: 0.6rem;
     scrollbar-color: var(--hairline-strong) transparent;
@@ -713,6 +724,7 @@ header.artifact-header > .artifact-comment {
   /* In the gutter a card would read as a second surface competing with the
      header, so the rail is drawn as a hairline margin note. */
   :root[data-outline="pinned"] .artifact-outline {
+    background: none;
     border: 0;
     border-radius: 0;
     max-height: calc(100vh - var(--topbar-height) - 3rem);
