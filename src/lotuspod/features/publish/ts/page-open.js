@@ -641,9 +641,12 @@
   // by CSS; here a tap opens it too (OPEN), as a touch screen has no hover,
   // Escape closes it where the pointer and focus stay (DISMISSED), and the
   // disclosure's open state follows what shows, so its summary reports it.
+  // A touch marks the outline (TOUCHED) until a mouse moves, as the hover a
+  // tap leaves behind is not a pointer over the handle.
   var OUTLINE = "lotuspod:outline";
   var OPEN = "artifact-outline--open";
   var DISMISSED = "artifact-outline--dismissed";
+  var TOUCHED = "artifact-outline--touched";
 
   function pinOutline() {
     var outline = document.querySelector("nav.artifact-outline");
@@ -688,12 +691,23 @@
 
     function shown() {
       return !outline.classList.contains(DISMISSED) &&
-        outline.matches(":hover, ." + OPEN + ", :has(:focus-visible)");
+        outline.matches(":hover:not(." + TOUCHED + "), ." + OPEN + ", :has(:focus-visible)");
     }
 
+    // Wide, the disclosure is open whenever the list shows, pinned or not:
+    // where ::details-content is not understood that is what shows it.
+    // Narrow, it is as the reader last left it there.
+    var own = disclosure.open;
+    disclosure.addEventListener("toggle", function () {
+      if (!wide()) {
+        own = disclosure.open;
+      }
+    });
+
     function sync() {
-      if (wide() && !pinned && disclosure.open !== shown()) {
-        disclosure.open = shown();
+      var open = wide() ? pinned || shown() : own;
+      if (disclosure.open !== open) {
+        disclosure.open = open;
       }
     }
 
@@ -726,7 +740,10 @@
     });
     outline.addEventListener("pointerenter", sync);
     outline.addEventListener("pointerleave", function () {
-      outline.classList.remove(DISMISSED);
+      // Focus still shown in it keeps an Escape standing.
+      if (!outline.matches(":has(:focus-visible)")) {
+        outline.classList.remove(DISMISSED);
+      }
       sync();
     });
     outline.addEventListener("focusin", function (event) {
@@ -744,11 +761,21 @@
     // A tap elsewhere closes a panel a tap opened, as does a tap on a link
     // in it once the link has been followed.
     document.addEventListener("pointerdown", function (event) {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        outline.classList.add(TOUCHED);
+      }
       if (!outline.contains(event.target) && outline.classList.contains(OPEN)) {
         outline.classList.remove(OPEN);
         sync();
       }
     });
+    document.addEventListener("pointermove", function (event) {
+      if (event.pointerType === "mouse" && outline.classList.contains(TOUCHED)) {
+        outline.classList.remove(TOUCHED);
+        sync();
+      }
+    });
+    window.addEventListener("resize", sync);
     outline.addEventListener("click", function (event) {
       if (event.target.closest("a") && !event.target.matches(":focus-visible")) {
         outline.classList.remove(OPEN);
@@ -775,9 +802,7 @@
     pin.addEventListener("click", function () {
       pinned = !pinned;
       show();
-      if (!pinned) {
-        sync();
-      }
+      sync();
       try {
         if (pinned) {
           localStorage.setItem(OUTLINE, "pinned");
@@ -792,6 +817,7 @@
       window.dispatchEvent(new Event("resize"));
     });
     show();
+    sync();
   }
 
   pinOutline();

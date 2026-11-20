@@ -170,6 +170,9 @@ test('pinned, the outline is a column beside the body after a reload; unpinned, 
   await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
   await expect(list).toBeVisible();
   await expect(handle).toHaveText('On this page');
+  // Open as a disclosure too, so it reads as expanded and shows where
+  // ::details-content is not understood.
+  await expect(outline.locator('details.artifact-outline-disclosure')).toHaveJSProperty('open', true);
   const column = await rect(outline);
   const pinnedBody = await rect(body);
   expect(column.width).toBeGreaterThan(200);
@@ -203,12 +206,15 @@ test('the header is the title, one meta line and the summary', async ({ page }) 
   const meta = header.locator(':scope > .artifact-meta');
   const versions = meta.locator('.artifact-versions-link');
   const comments = header.locator(':scope > details.artifact-comment > summary');
+  const action = comments.locator('.artifact-comment-chip-act');
   const owner = header.locator(':scope > .artifact-owner');
   const summary = header.locator(':scope > .artifact-summary');
 
   await expect(meta).toContainText('Created');
   await expect(versions).toHaveText(/^Versions · \d+$/);
-  await expect(comments).toContainText('No comments');
+  await expect(comments).toHaveText('No comments · Comment on this page');
+  await expect(action).toHaveText('Comment on this page');
+  await expect(action).toBeVisible();
   await expect(owner).toHaveText(`by ${OWNER}`);
   await expect(summary).toHaveText(SUMMARY);
 
@@ -217,7 +223,7 @@ test('the header is the title, one meta line and the summary', async ({ page }) 
 
   // Created, Versions, the comments link and the owner share one line.
   const line = await rect(meta);
-  for (const part of [versions, comments, owner]) {
+  for (const part of [versions, comments, owner, action]) {
     const at = await rect(part);
     expect(Math.abs((at.top + at.bottom) / 2 - (line.top + line.bottom) / 2)).toBeLessThan(4);
   }
@@ -225,6 +231,8 @@ test('the header is the title, one meta line and the summary', async ({ page }) 
   // The comments link ends the line, so its redraw moves nothing after it.
   const left = [await rect(meta), await rect(versions), await rect(owner), await rect(comments)].map((r) => r.left);
   expect([...left].sort((a, b) => a - b)).toEqual(left);
+  const ends = await Promise.all([meta, versions, owner].map(async (part) => (await rect(part)).right));
+  expect((await rect(action)).right).toBeGreaterThan(Math.max(...ends));
   const title = await rect(header.locator('.artifact-title'));
   expect(title.bottom).toBeLessThanOrEqual(line.top + 1);
   expect(line.bottom).toBeLessThanOrEqual((await rect(summary)).top + 1);
@@ -258,6 +266,43 @@ test('on a phone the outline is the disclosure above the prose, and nothing scro
   expect(errors).toEqual([]);
 });
 
+test('a hover on the wide handle leaves the phone disclosure as the reader left it', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  await outline.locator('.artifact-outline-summary').hover();
+  await expect(list).toBeVisible();
+  await page.setViewportSize(PHONE);
+  await page.mouse.move(PHONE.width - 20, PHONE.height - 20);
+  await expect(list).toBeHidden();
+  await expect(outline.locator('details.artifact-outline-disclosure')).toHaveJSProperty('open', false);
+  expect(errors).toEqual([]);
+});
+
+test('open over the page the outline moves nothing below it, and closed it adds no scrolling', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  // An outline taller than the article it lists.
+  await page.addStyleTag({ content: '.artifact-outline-list a { padding-bottom: 600px; }' });
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const footer = page.locator('.artifact-footer');
+  const height = () => page.evaluate(() => document.documentElement.scrollHeight);
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+  await expect(list).toBeHidden();
+  const closed = await height();
+  const below = (await rect(footer)).top;
+  await outline.evaluate((node) => { (node as HTMLElement).style.display = 'none'; });
+  expect(await height()).toBe(closed);
+  await outline.evaluate((node) => { (node as HTMLElement).style.display = ''; });
+
+  await outline.locator('.artifact-outline-summary').hover();
+  await expect(list).toBeVisible();
+  expect((await rect(footer)).top).toBe(below);
+  expect(errors).toEqual([]);
+});
+
 test('Escape closes the open outline where the pointer and focus stay', async ({ page }) => {
   await page.setViewportSize(WIDE);
   const errors = await open(page);
@@ -273,7 +318,15 @@ test('Escape closes the open outline where the pointer and focus stay', async ({
   await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
   await handle.hover();
   await expect(list).toBeVisible();
+  // Escape with focus on the handle under the pointer, then the pointer
+  // leaves: focus still there keeps it closed.
+  await page.locator('.artifact-topbar button:visible').last().focus();
+  await page.keyboard.press('Tab');
+  await expect(handle).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(list).toBeHidden();
   await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+  await expect(list).toBeHidden();
 
   await page.locator('.artifact-topbar button:visible').last().focus();
   await page.keyboard.press('Tab');
@@ -299,12 +352,22 @@ test.describe('on a touch screen', () => {
     const outline = page.locator('nav.artifact-outline');
     const list = outline.locator('.artifact-outline-list');
     await expect(list).toBeHidden();
-    await outline.locator('.artifact-outline-summary').tap();
+    const handle = outline.locator('.artifact-outline-summary');
+    await handle.tap();
+    await expect(list).toBeVisible();
+    // A second tap closes it, the hover the tap left behind aside.
+    await handle.tap();
+    await expect(list).toBeHidden();
+    await handle.tap();
     await expect(list).toBeVisible();
     const entry = list.getByRole('link').first();
     const href = (await entry.getAttribute('href'))!;
     await entry.tap();
     await expect.poll(() => page.evaluate(() => location.hash)).toBe(href);
+    // Followed, the entry closes it.
+    await expect(list).toBeHidden();
+    await handle.tap();
+    await expect(list).toBeVisible();
     // A tap elsewhere closes it.
     await page.touchscreen.tap(WIDE.width - 40, WIDE.height - 40);
     await expect(list).toBeHidden();

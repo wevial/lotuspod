@@ -554,22 +554,34 @@ header.artifact-header > .artifact-comment {
 
   /* Open, the panel is the rail drawn over the margin: the page's own ground
      and the rail's hairline, scrollable itself if a long outline outgrows
-     the screen. */
-  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) {
+     the screen. It is out of flow over the handle, so the handle's grid row
+     keeps the body's height and nothing below it moves. Hover left by a tap
+     (the page script's artifact-outline--touched) opens nothing. */
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) > .artifact-outline-disclosure {
     background: var(--color-night);
-    border-color: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-block);
+    left: -1px;
     max-height: calc(100vh - var(--topbar-height) - 3rem);
     overflow-y: auto;
     padding-bottom: 0.6rem;
+    position: absolute;
     scrollbar-color: var(--hairline-strong) transparent;
     scrollbar-width: thin;
+    top: -1px;
     width: calc(var(--outline-rail) + var(--outline-handle));
+  }
+
+  /* Closed, the handle clips what it holds, so the hidden list adds no
+     scrolling to the page. */
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:not(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)), .artifact-outline--dismissed) {
+    overflow: clip;
   }
 
   /* Closed, what the panel holds is hidden out of flow. It hides a moment
      after the panel closes, so focus leaving the summary for a link finds the
      link still shown and can land on it, with or without the page script. */
-  :root:not([data-outline="pinned"]) .artifact-outline:is(:not(:hover, .artifact-outline--open, :has(:focus-visible)), .artifact-outline--dismissed) :is(
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:not(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)), .artifact-outline--dismissed) :is(
     .artifact-outline-list, .artifact-sections-all, .artifact-outline-pin
   ) {
     position: absolute;
@@ -622,7 +634,7 @@ header.artifact-header > .artifact-comment {
     position: absolute;
   }
 
-  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) .artifact-outline-summary {
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) .artifact-outline-summary {
     color: var(--color-lavender);
   }
 
