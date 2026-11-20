@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-XsYDUN97AmReQCOiXeoKYVKrikjPH6u8ZTN5nQBSAXo=' 'sha256-vSVW0lrhdrlT7yNzwgrmqkyDbRpcl9vlZMrfx+C+Jq8='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/mermaid@11.4.1/ https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/ 'sha256-2wXjQWvT3P5JiFdu0s9b5czZlssHNLDYf6+juA8/nzk=' 'sha256-vSVW0lrhdrlT7yNzwgrmqkyDbRpcl9vlZMrfx+C+Jq8='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plain Page · Lotuspod</title>
   <meta name="generator" content="lotuspod theme lotus">
@@ -27,6 +27,19 @@
     choice = "auto";
   }
   var buttons = [];
+
+  // The outline pinned in this browser (features/publish/ts/page-open.js
+  // keeps it under OUTLINE) is marked on the root while the head parses, so
+  // a pinned page paints its column first, a page without the page script
+  // (an earlier version) included. Storage that refuses or throws reads as
+  // not pinned.
+  try {
+    if (window.localStorage.getItem("lotuspod:outline") === "pinned") {
+      root.setAttribute("data-outline", "pinned");
+    }
+  } catch (error) {
+    // Not pinned.
+  }
 
   // Before the body paints, the root is marked so HIDDEN hides what the
   // reader would see only for a moment: a pod that may leave for its index's
