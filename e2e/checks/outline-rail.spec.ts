@@ -46,6 +46,17 @@ async function open(page: Page, address = ARTICLE) {
   return errors;
 }
 
+// A browser whose matches() throws on :has().
+function withoutHasInMatches(page: Page) {
+  return page.addInitScript(() => {
+    const matches = Element.prototype.matches;
+    Element.prototype.matches = function (this: Element, selector: string) {
+      if (selector.includes(':has(')) throw new DOMException(`'${selector}' is not a valid selector`, 'SyntaxError');
+      return matches.call(this, selector);
+    };
+  });
+}
+
 // hermes publishes the markdown as the page name, with comments and a
 // one-line summary, in the article variant the capture article renders in,
 // so its header has a summary, an owner, the comments link and the versions.
@@ -489,13 +500,7 @@ test('pinning measures the tables again, so none runs under the comments panel',
 });
 
 test('a browser without :has() in matches() still opens the outline and starts the rest of the page', async ({ page }) => {
-  await page.addInitScript(() => {
-    const matches = Element.prototype.matches;
-    Element.prototype.matches = function (this: Element, selector: string) {
-      if (selector.includes(':has(')) throw new DOMException(`'${selector}' is not a valid selector`, 'SyntaxError');
-      return matches.call(this, selector);
-    };
-  });
+  await withoutHasInMatches(page);
   await page.setViewportSize(WIDE);
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: 'capture-owned', threads: [] } }));
@@ -556,13 +561,7 @@ test('a browser without :has() keeps the disclosure, and hovering it moves nothi
     const css = (await response.text()).replaceAll(':has(', ':x-has(');
     await route.fulfill({ response, body: css });
   });
-  await page.addInitScript(() => {
-    const matches = Element.prototype.matches;
-    Element.prototype.matches = function (this: Element, selector: string) {
-      if (selector.includes(':has(')) throw new DOMException(`'${selector}' is not a valid selector`, 'SyntaxError');
-      return matches.call(this, selector);
-    };
-  });
+  await withoutHasInMatches(page);
   await page.setViewportSize(WIDE);
   const errors = await open(page);
   const outline = page.locator('nav.artifact-outline');
