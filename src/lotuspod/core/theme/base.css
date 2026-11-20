@@ -271,7 +271,10 @@ body {
   padding: 0.85rem 1.75rem 0.8rem;
 }
 
+/* Stated, so an authored rule for the page's own paragraphs (flex: 1 on
+   body cards) does not size the header's. */
 .artifact-header > * {
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -541,8 +544,9 @@ header.artifact-header > .artifact-comment {
 
   /* The handle sits above the body and below the title bar (z-index 3), its
      border drawn clear while closed so opening moves nothing under the
-     pointer. */
+     pointer. Its ground is stated, so an authored nav rule does not paint it. */
   .artifact-outline {
+    background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-block);
     grid-area: 1 / 1;
@@ -556,13 +560,15 @@ header.artifact-header > .artifact-comment {
      and the rail's hairline, scrollable itself if a long outline outgrows
      the screen. Its margin takes back its height, never more than the
      screen's, so the grid row keeps the body's height and nothing below it
-     moves. Hover left by a tap (the page script's artifact-outline--touched)
+     moves; the page script's --outline-room, the room from its top to the
+     window's bottom, less a gap, its padding and border, keeps it from
+     lengthening the page. Hover left by a tap (the page script's artifact-outline--touched)
      opens nothing. */
   :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) {
     background: var(--color-night);
     border-color: var(--hairline);
     margin-bottom: -100vh;
-    max-height: calc(100vh - var(--topbar-height) - 3rem);
+    max-height: min(calc(100vh - var(--topbar-height) - 3rem), calc(var(--outline-room, 100vh) - 2.5rem));
     overflow-y: auto;
     padding-bottom: 0.6rem;
     scrollbar-color: var(--hairline-strong) transparent;
@@ -622,12 +628,15 @@ header.artifact-header > .artifact-comment {
     width: calc(var(--outline-handle) - 2px);
   }
 
+  /* Forced colors drop background images, so the rules keep their own,
+     in the system's text color. */
   .artifact-outline-summary::before {
     background:
       linear-gradient(currentColor, currentColor) 0 0 / 100% 2px no-repeat,
       linear-gradient(currentColor, currentColor) 0 50% / 75% 2px no-repeat,
       linear-gradient(currentColor, currentColor) 0 100% / 50% 2px no-repeat;
     content: "";
+    forced-color-adjust: none;
     inset: 0.7rem 0.6rem;
     position: absolute;
   }
@@ -704,6 +713,7 @@ header.artifact-header > .artifact-comment {
   /* In the gutter a card would read as a second surface competing with the
      header, so the rail is drawn as a hairline margin note. */
   :root[data-outline="pinned"] .artifact-outline {
+    background: none;
     border: 0;
     border-radius: 0;
     max-height: calc(100vh - var(--topbar-height) - 3rem);

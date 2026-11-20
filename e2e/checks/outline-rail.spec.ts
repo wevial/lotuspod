@@ -218,6 +218,8 @@ test('the header is the title, one meta line and the summary', async ({ page }) 
   await expect(owner).toHaveText(`by ${OWNER}`);
   await expect(summary).toHaveText(SUMMARY);
 
+  // An authored rule for the page's own paragraphs does not reach the header's.
+  await page.addStyleTag({ content: 'p { flex: 1; }' });
   const box = await rect(header);
   expect(box.bottom - box.top).toBeLessThanOrEqual(130);
 
@@ -300,6 +302,8 @@ test('open over the page the outline moves nothing below it, and closed it adds 
   await outline.locator('.artifact-outline-summary').hover();
   await expect(list).toBeVisible();
   expect((await rect(footer)).top).toBe(below);
+  // Nor does it lengthen the page.
+  expect(await height()).toBe(closed);
   // Collapse all is in the panel, over the page, not under it.
   const all = outline.locator('.artifact-sections-all');
   await all.scrollIntoViewIfNeeded();
@@ -307,6 +311,28 @@ test('open over the page the outline moves nothing below it, and closed it adds 
     const box = node.getBoundingClientRect();
     return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === node;
   })).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the handle draws its rules in forced colors, and an authored nav rule paints neither handle nor column', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const handle = outline.locator('.artifact-outline-summary');
+  await page.emulateMedia({ forcedColors: 'active' });
+  expect(await handle.evaluate((node) => getComputedStyle(node, '::before').backgroundImage)).toContain('linear-gradient');
+  await page.emulateMedia({ forcedColors: 'none' });
+
+  await page.addStyleTag({ content: 'nav { background: #224466; }' });
+  const ground = () => outline.evaluate((node) => getComputedStyle(node).backgroundColor);
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+  expect(await ground()).toBe('rgba(0, 0, 0, 0)');
+  await handle.hover();
+  await outline.getByRole('button', { name: 'Pin outline' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+  expect(await ground()).toBe('rgba(0, 0, 0, 0)');
+  await outline.getByRole('button', { name: 'Pin outline' }).click();
   expect(errors).toEqual([]);
 });
 
@@ -334,6 +360,17 @@ test('Escape closes the open outline where the pointer and focus stay', async ({
   await expect(list).toBeHidden();
   await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
   await expect(list).toBeHidden();
+
+  // Escape under the pointer with focus in the title bar, then Tab: the
+  // handle takes focus and opens.
+  await handle.hover();
+  await page.locator('.artifact-topbar button:visible').last().focus();
+  await page.keyboard.press('Escape');
+  await expect(list).toBeHidden();
+  await page.keyboard.press('Tab');
+  await expect(handle).toBeFocused();
+  await expect(list).toBeVisible();
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
 
   await page.locator('.artifact-topbar button:visible').last().focus();
   await page.keyboard.press('Tab');

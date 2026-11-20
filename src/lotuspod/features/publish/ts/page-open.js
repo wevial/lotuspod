@@ -704,7 +704,17 @@
       }
     });
 
+    // The room from the handle's top to the window's bottom, which the
+    // open panel keeps within so it does not lengthen the page.
+    function fit() {
+      if (wide() && !pinned && shown()) {
+        var room = document.documentElement.clientHeight - outline.getBoundingClientRect().top;
+        outline.style.setProperty("--outline-room", Math.max(0, room) + "px");
+      }
+    }
+
     function sync() {
+      fit();
       var open = wide() ? pinned || shown() : own;
       if (disclosure.open !== open) {
         disclosure.open = open;
@@ -747,6 +757,10 @@
       sync();
     });
     outline.addEventListener("focusin", function (event) {
+      // Focus arriving from outside opens what an Escape closed.
+      if (!outline.contains(event.relatedTarget)) {
+        outline.classList.remove(DISMISSED);
+      }
       if (event.target.matches(":focus-visible")) {
         outline.classList.add(OPEN);
       }
@@ -776,6 +790,7 @@
       }
     });
     window.addEventListener("resize", sync);
+    window.addEventListener("scroll", fit, { passive: true });
     outline.addEventListener("click", function (event) {
       if (event.target.closest("a") && !event.target.matches(":focus-visible")) {
         outline.classList.remove(OPEN);
