@@ -713,8 +713,9 @@
 
     // How far the open panel is raised so it ends GAP above the window's
     // bottom: every entry in view, and the page no longer. It still covers
-    // the handle's own place in the window, so a pointer resting there stays
-    // over it rather than closing it and finding the handle under it again.
+    // the closed handle's whole box, its border and a rounded pixel too, so
+    // a pointer resting anywhere on it stays over it rather than closing it
+    // and finding the handle under it again.
     var GAP = 16;
     function fit() {
       var lift = 0;
@@ -722,7 +723,8 @@
         var raised = parseFloat(outline.style.getPropertyValue("--outline-lift")) || 0;
         var bottom = outline.getBoundingClientRect().top + raised + outline.offsetHeight;
         var view = document.documentElement.clientHeight;
-        var handle = Math.min(summary.getBoundingClientRect().bottom + raised, view);
+        var handle = Math.min(
+          Math.ceil(summary.getBoundingClientRect().bottom + raised + outline.clientTop) + 1, view);
         lift = Math.max(0, Math.min(bottom - (view - GAP), bottom - handle));
       }
       outline.style.setProperty("--outline-lift", lift + "px");

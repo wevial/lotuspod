@@ -562,8 +562,11 @@ test('in a short wide window a pointer resting low on the handle keeps the outli
   const outline = page.locator('nav.artifact-outline');
   const list = outline.locator('.artifact-outline-list');
   const handle = await rect(outline.locator('.artifact-outline-summary'));
-  // Below where a panel ending GAP above the window's bottom would end.
-  const y = Math.min(handle.bottom, SHORT.height) - 2;
+  // On the closed handle's bottom edge, its border included: below where a
+  // panel ending GAP above the window's bottom would end.
+  const closed = await rect(outline);
+  const y = Math.ceil(Math.min(closed.bottom, SHORT.height)) - 1;
+  expect(y).toBeGreaterThan(handle.bottom);
   expect(y).toBeGreaterThan(SHORT.height - 16);
   await outline.evaluate((node) => {
     (window as unknown as { leaves: number }).leaves = 0;
