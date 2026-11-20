@@ -554,21 +554,19 @@ header.artifact-header > .artifact-comment {
 
   /* Open, the panel is the rail drawn over the margin: the page's own ground
      and the rail's hairline, scrollable itself if a long outline outgrows
-     the screen. It is out of flow over the handle, so the handle's grid row
-     keeps the body's height and nothing below it moves. Hover left by a tap
-     (the page script's artifact-outline--touched) opens nothing. */
-  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) > .artifact-outline-disclosure {
+     the screen. Its margin takes back its height, never more than the
+     screen's, so the grid row keeps the body's height and nothing below it
+     moves. Hover left by a tap (the page script's artifact-outline--touched)
+     opens nothing. */
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) {
     background: var(--color-night);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-block);
-    left: -1px;
+    border-color: var(--hairline);
+    margin-bottom: -100vh;
     max-height: calc(100vh - var(--topbar-height) - 3rem);
     overflow-y: auto;
     padding-bottom: 0.6rem;
-    position: absolute;
     scrollbar-color: var(--hairline-strong) transparent;
     scrollbar-width: thin;
-    top: -1px;
     width: calc(var(--outline-rail) + var(--outline-handle));
   }
 

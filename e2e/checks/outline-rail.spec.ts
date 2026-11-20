@@ -300,6 +300,13 @@ test('open over the page the outline moves nothing below it, and closed it adds 
   await outline.locator('.artifact-outline-summary').hover();
   await expect(list).toBeVisible();
   expect((await rect(footer)).top).toBe(below);
+  // Collapse all is in the panel, over the page, not under it.
+  const all = outline.locator('.artifact-sections-all');
+  await all.scrollIntoViewIfNeeded();
+  expect(await all.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === node;
+  })).toBe(true);
   expect(errors).toEqual([]);
 });
 
