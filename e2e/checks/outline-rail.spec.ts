@@ -338,7 +338,7 @@ test('the handle draws its rules in forced colors, and an authored nav rule pain
   expect(await handle.evaluate((node) => getComputedStyle(node, '::before').backgroundImage)).toContain('linear-gradient');
   await page.emulateMedia({ forcedColors: 'none' });
 
-  await page.addStyleTag({ content: 'nav, nav[aria-label] { background: #224466; }' });
+  await page.addStyleTag({ content: 'nav, nav[aria-label], .artifact nav[aria-label] { background: #224466; }' });
   const ground = () => outline.evaluate((node) => getComputedStyle(node).backgroundColor);
   await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
   expect(await ground()).toBe('rgba(0, 0, 0, 0)');
@@ -521,6 +521,88 @@ test('a browser without :has() in matches() still opens the outline and starts t
   await expect(list).toBeHidden();
   // What starts after the outline still starts.
   await expect(page.locator('header.artifact-header .artifact-versions-link')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('pinned, the outline heading shows keyboard focus in forced colors', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  await page.addInitScript(() => localStorage.setItem('lotuspod:outline', 'pinned'));
+  const errors = await open(page);
+  await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
+  await page.emulateMedia({ forcedColors: 'active' });
+  const handle = page.locator('nav.artifact-outline .artifact-outline-summary');
+  await page.locator('.artifact-topbar button:visible').last().focus();
+  await page.keyboard.press('Tab');
+  await expect(handle).toBeFocused();
+  expect(await handle.evaluate((node) => parseFloat(getComputedStyle(node).outlineWidth))).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('a pin pressed in another open page of this browser holds in this one', async ({ page, context }) => {
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  const other = await context.newPage();
+  await other.setViewportSize(WIDE);
+  await open(other);
+  await other.locator('nav.artifact-outline .artifact-outline-summary').hover();
+  await other.getByRole('button', { name: 'Pin outline' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
+  await expect(page.getByRole('button', { name: 'Pin outline' })).toHaveAttribute('aria-pressed', 'true');
+  await other.getByRole('button', { name: 'Pin outline' }).click();
+  await expect(page.locator('html')).not.toHaveAttribute('data-outline', /.*/);
+  await expect(page.getByRole('button', { name: 'Pin outline' })).toHaveAttribute('aria-pressed', 'false');
+  await other.close();
+  expect(errors).toEqual([]);
+});
+
+test('in a short wide window a pointer resting low on the handle keeps the outline open, still', async ({ page }) => {
+  const SHORT = { width: 1280, height: 280 };
+  await page.setViewportSize(SHORT);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const handle = await rect(outline.locator('.artifact-outline-summary'));
+  // Below where a panel ending GAP above the window's bottom would end.
+  const y = Math.min(handle.bottom, SHORT.height) - 2;
+  expect(y).toBeGreaterThan(SHORT.height - 16);
+  await outline.evaluate((node) => {
+    (window as unknown as { leaves: number }).leaves = 0;
+    node.addEventListener('pointerleave', () => { (window as unknown as { leaves: number }).leaves += 1; });
+  });
+  await page.mouse.move(handle.left + handle.width / 2, y);
+  await expect(list).toBeVisible();
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => (window as unknown as { leaves: number }).leaves)).toBe(0);
+  await expect(list).toBeVisible();
+  const panel = await rect(outline);
+  expect(panel.bottom).toBeGreaterThan(y);
+  expect(panel.bottom).toBeLessThanOrEqual(SHORT.height);
+  for (const link of await list.getByRole('link').all()) {
+    expect((await rect(link)).bottom).toBeLessThanOrEqual(SHORT.height);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('where ::details-content is not understood, the first hover in a short window shows every entry', async ({ page }) => {
+  await page.route((url) => url.pathname.endsWith('/lotuspod.css'), async (route) => {
+    const response = await route.fetch();
+    const css = (await response.text()).replaceAll('::details-content', '::x-details-content');
+    await route.fulfill({ response, body: css });
+  });
+  const SHORT = { width: 1280, height: 300 };
+  await page.setViewportSize(SHORT);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const handle = await rect(outline.locator('.artifact-outline-summary'));
+  await page.mouse.move(handle.left + handle.width / 2, handle.top + handle.height / 2);
+  await expect(list).toBeVisible();
+  expect((await rect(outline)).bottom).toBeLessThanOrEqual(SHORT.height);
+  for (const link of await list.getByRole('link').all()) {
+    const at = await rect(link);
+    expect(at.top).toBeGreaterThanOrEqual(0);
+    expect(at.bottom).toBeLessThanOrEqual(SHORT.height);
+  }
   expect(errors).toEqual([]);
 });
 

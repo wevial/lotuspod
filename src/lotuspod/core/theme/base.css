@@ -551,8 +551,8 @@ header.artifact-header > .artifact-comment {
   /* The handle sits above the body and below the title bar (z-index 3), its
      border drawn clear while closed so opening moves nothing under the
      pointer. Its ground is stated, under the root, so an authored nav rule,
-     an attribute's weight in it too, does not paint it. */
-  :root .artifact-outline {
+     a class and an attribute's weight in it too, does not paint it. */
+  :root:not([data-outline="pinned"]) .artifact-outline {
     background: transparent;
   }
 
@@ -725,6 +725,7 @@ header.artifact-header > .artifact-comment {
   /* In the gutter a card would read as a second surface competing with the
      header, so the rail is drawn as a hairline margin note. */
   :root[data-outline="pinned"] .artifact-outline {
+    background: none;
     border: 0;
     border-radius: 0;
     max-height: calc(100vh - var(--topbar-height) - 3rem);
@@ -759,6 +760,13 @@ header.artifact-header > .artifact-comment {
   :root[data-outline="pinned"] .artifact-outline-summary:focus-visible {
     color: var(--color-lavender);
     outline: 0;
+  }
+
+  /* Forced colors keep the text's color, so focus is drawn as a ring. */
+  @media (forced-colors: active) {
+    :root[data-outline="pinned"] .artifact-outline-summary:focus-visible {
+      outline: 2px solid;
+    }
   }
 
   :root[data-outline="pinned"] .artifact-outline-list {

@@ -712,24 +712,30 @@
     });
 
     // How far the open panel is raised so it ends GAP above the window's
-    // bottom: every entry in view, and the page no longer.
+    // bottom: every entry in view, and the page no longer. It still covers
+    // the handle's own place in the window, so a pointer resting there stays
+    // over it rather than closing it and finding the handle under it again.
     var GAP = 16;
     function fit() {
       var lift = 0;
       if (wide() && !pinned && shown()) {
         var raised = parseFloat(outline.style.getPropertyValue("--outline-lift")) || 0;
         var bottom = outline.getBoundingClientRect().top + raised + outline.offsetHeight;
-        lift = Math.max(0, bottom - (document.documentElement.clientHeight - GAP));
+        var view = document.documentElement.clientHeight;
+        var handle = Math.min(summary.getBoundingClientRect().bottom + raised, view);
+        lift = Math.max(0, Math.min(bottom - (view - GAP), bottom - handle));
       }
       outline.style.setProperty("--outline-lift", lift + "px");
     }
 
+    // The disclosure opens before the panel is measured: where
+    // ::details-content is not understood, it is what gives the list height.
     function sync() {
-      fit();
       var open = wide() ? pinned || shown() : own;
       if (disclosure.open !== open) {
         disclosure.open = open;
       }
+      fit();
     }
 
     function show() {
@@ -830,12 +836,19 @@
       }
     });
 
-    pin.addEventListener("click", function () {
-      pinned = !pinned;
+    function repin(now) {
+      pinned = now;
       show();
       sync();
+      // The body moved: what is measured against it (the tables' room up to
+      // the comments panel) is measured again, as on a resize.
+      window.dispatchEvent(new Event("resize"));
+    }
+
+    pin.addEventListener("click", function () {
+      var now = !pinned;
       try {
-        if (pinned) {
+        if (now) {
           localStorage.setItem(OUTLINE, "pinned");
         } else {
           localStorage.removeItem(OUTLINE);
@@ -843,9 +856,15 @@
       } catch (ignored) {
         // Storage refused: the outline still pins, only unremembered.
       }
-      // The body moved: what is measured against it (the tables' room up to
-      // the comments panel) is measured again, as on a resize.
-      window.dispatchEvent(new Event("resize"));
+      repin(now);
+    });
+    // A pin pressed in another open page of this browser (a tab of the
+    // index) holds here too. A cleared storage clears it as well.
+    window.addEventListener("storage", function (event) {
+      if ((event.key === OUTLINE || event.key === null) &&
+          (event.newValue === "pinned") !== pinned) {
+        repin(event.newValue === "pinned");
+      }
     });
     show();
     sync();
