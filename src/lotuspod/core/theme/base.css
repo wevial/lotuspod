@@ -272,7 +272,6 @@ body {
 }
 
 .artifact-header > * {
-  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -544,7 +543,6 @@ header.artifact-header > .artifact-comment {
      border drawn clear while closed so opening moves nothing under the
      pointer. */
   .artifact-outline {
-    background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-block);
     grid-area: 1 / 1;
@@ -696,7 +694,6 @@ header.artifact-header > .artifact-comment {
   /* In the gutter a card would read as a second surface competing with the
      header, so the rail is drawn as a hairline margin note. */
   :root[data-outline="pinned"] .artifact-outline {
-    background: none;
     border: 0;
     border-radius: 0;
     max-height: calc(100vh - var(--topbar-height) - 3rem);
