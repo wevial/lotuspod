@@ -192,6 +192,55 @@ async function openTabs(page: Page, pods: Pod[], on: Pod) {
   for (const pod of pods) await expect(framed(page, pod).locator('h1')).toHaveText(pod.title);
 }
 
+// What the top-level document showed at each animation frame from its
+// first, kept in sessionStorage so a pod's move to its index keeps the pod's
+// own frames: the document's path, whether a pod's article heading or a
+// paragraph its markup sets visible itself, the listing's table, and the
+// active tab's framed pod heading were visible.
+type Sample = { path: string; article: boolean; listing: boolean; framed: boolean };
+const SAMPLES = 'pod-tabs-samples';
+
+async function sampleFrames(page: Page) {
+  await page.addInitScript((key) => {
+    if (window.top !== window) return;
+    const seen = (node: Element | null | undefined) =>
+      Boolean(node && node.checkVisibility({ visibilityProperty: true, opacityProperty: true }));
+    // Kept in memory, written every few frames and as the document goes.
+    let kept: unknown[];
+    try {
+      kept = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+    } catch {
+      return;
+    }
+    const keep = () => sessionStorage.setItem(key, JSON.stringify(kept));
+    addEventListener('pagehide', keep);
+    let count = 0;
+    const sample = () => {
+      const active = document.querySelector<HTMLIFrameElement>('iframe.pod-frame--active');
+      const framed = seen(active) && seen(active?.contentDocument?.querySelector('main.artifact h1'));
+      kept.push({ path: location.pathname,
+        article: seen(document.querySelector('main.artifact h1')) || seen(document.getElementById('pod-tabs-authored')),
+        listing: seen(document.querySelector('.index-table')), framed });
+      if (++count % 20 === 0 || framed) keep();
+      if (count < 3000) requestAnimationFrame(sample);
+      else keep();
+    };
+    requestAnimationFrame(sample);
+  }, SAMPLES);
+}
+
+async function samples(page: Page): Promise<Sample[]> {
+  return JSON.parse(await page.evaluate((key) => sessionStorage.getItem(key) ?? '[]', SAMPLES));
+}
+
+// The article served with markup of its own just after its heading.
+async function authored(page: Page, markup: string) {
+  await page.route(`**/${ARTICLE.name}.html`, async (route) => {
+    const answer = await route.fetch();
+    await route.fulfill({ response: answer, body: (await answer.text()).replace('</h1>', `</h1>${markup}`) });
+  });
+}
+
 test.describe('signed in', () => {
   test.use({ extraHTTPHeaders: SIGNED_IN });
 
@@ -498,14 +547,324 @@ test.describe('signed in', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a pod loaded directly paints none of its article before it moves into its tab', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // A paragraph the pod's own markup sets visible, and a fade-in of its
+    // body that reduced motion replaces with its end state, as an author may
+    // write.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await authored(page, '<p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
+      + '<style>@keyframes pod-tabs-fade { from { opacity: 0; visibility: hidden }'
+      + ' to { opacity: 1; visibility: visible } } body { animation: pod-tabs-fade 0.2s forwards }'
+      + ' @media (prefers-reduced-motion: reduce) { :root body { animation: none;'
+      + ' opacity: 1 !important; visibility: visible !important } }</style>');
+    // The index's answer held long enough for the bare page to paint many
+    // frames, and well inside the head's failsafe; the index document the
+    // pod then loads held until past it.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, route.request().resourceType() === 'fetch' ? 700 : 4000));
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 15000 });
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toBeVisible();
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const seen = await samples(page);
+    const bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(0);
+    expect(bare.filter((each) => each.article)).toEqual([]);
+    // Nor the index's listing before the pod's frame shows it.
+    const index = seen.filter((each) => each.path === '/');
+    const shown = index.findIndex((each) => each.framed);
+    expect(index.slice(0, shown).filter((each) => each.listing)).toEqual([]);
+    await expect(page.locator('html')).not.toHaveClass(/pod-tabs-(leaving|opening)/);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  // The pod with an autofocused control in a closed dialog, then one on the page.
+  const AUTOFOCUSED = '<dialog><input autofocus></dialog><input id="pod-tabs-autofocus" autofocus>';
+
+  test('a pod that stays after its index answers focuses its autofocused control', async ({ page }) => {
+    const errors = await watch(page);
+    await authored(page, AUTOFOCUSED);
+    // An index that does not list the pod, answered while it is still hidden.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Pages</title>' });
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(page.locator('#pod-tabs-autofocus')).toBeFocused();
+    expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+
+    // Opened at a fragment whose target takes focus: the target has it, as
+    // a fragment navigation gives it, and the autofocused control does not.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, `${AUTOFOCUSED}<button id="pod-tabs-jump">Jump</button>`);
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#pod-tabs-jump`);
+    await expect(page.locator('#pod-tabs-jump')).toBeFocused();
+    expect(new URL(page.url()).hash).toBe('#pod-tabs-jump');
+
+    // A focusable form whose control named "focus" shadows its own method.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<form id="pod-tabs-form" tabindex="-1"><input name="focus"></form>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#pod-tabs-form`);
+    await expect(page.locator('#pod-tabs-form')).toBeFocused();
+
+    // An autofocused control in a declarative shadow root.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<div id="pod-tabs-host"><template shadowrootmode="open">'
+      + '<input id="pod-tabs-shadowed" autofocus></template></div>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect(page.locator('#pod-tabs-shadowed')).toBeFocused();
+
+    // A slotted autofocused control parsed before its host's shadow root,
+    // which holds one too, and a form whose controls shadow the methods a
+    // script would walk it with: the slotted control, the first parsed.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<form><input name="hasAttribute"><input name="getRootNode"></form>'
+      + '<div><input id="pod-tabs-slotted" autofocus><template shadowrootmode="open"><slot></slot>'
+      + '<input id="pod-tabs-later" autofocus></template></div>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect(page.locator('#pod-tabs-slotted')).toBeFocused();
+
+    // An autofocused control in a closed shadow root: its host holds focus.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<div id="pod-tabs-closed"><template shadowrootmode="closed">'
+      + '<input autofocus></template></div>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('pod-tabs-closed');
+
+    // A focusable MathML target.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<math><mi id="pod-tabs-formula" tabindex="0">x</mi></math>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#pod-tabs-formula`);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('pod-tabs-formula');
+
+    // A text fragment below the fold: scrolled to, as the browser does.
+    await page.unroute(`**/${ARTICLE.name}.html`);
+    await authored(page, '<div style="height: 3000px"></div><p id="pod-tabs-quoted">The quoted heron passage.</p>');
+    await page.goto('about:blank');
+    await page.goto(`/${ARTICLE.name}.html#:~:text=quoted%20heron%20passage`);
+    await expect(page.locator('main.artifact h1')).toBeVisible();
+    await expect(page.locator('#pod-tabs-quoted')).toBeInViewport();
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod whose index document is slow to load stays hidden until it moves', async ({ page }) => {
+    test.setTimeout(90_000);
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The index's answer prompt; the index document the pod then loads held
+    // long past the head's failsafe and the fallback a browser without the
+    // navigation API keeps.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') await new Promise((resolve) => setTimeout(resolve, 35000));
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 50000 });
+    await expectActive(page, ARTICLE);
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const bare = (await samples(page)).filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(1000);
+    expect(bare.filter((each) => each.article)).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('without the theme\'s stylesheet, a moving pod and the index opened at its tab paint neither article nor listing', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The pod's answer and the index script each held well inside the failsafe.
+    await page.route('**/lotuspod.css*', (route) => route.fulfill({ status: 404, body: '' }));
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
+    await page.route('**/lotuspod-index.js*', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+    await expect(page).toHaveURL(new RegExp(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}$`), { timeout: 15000 });
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const seen = await samples(page);
+    const bare = seen.filter((each) => each.path === `/${ARTICLE.name}.html`);
+    expect(bare.length).toBeGreaterThan(0);
+    expect(bare.filter((each) => each.article)).toEqual([]);
+    const index = seen.filter((each) => each.path === '/');
+    const shown = index.findIndex((each) => each.framed);
+    expect(shown).toBeGreaterThan(0);
+    expect(index.slice(0, shown).filter((each) => each.listing)).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors.filter((each) => !/404|Failed to load resource/.test(each))).toEqual([]);
+  });
+
+  test('a pod whose body has no box of its own paints none of its markup while its index answers', async ({ page }) => {
+    const errors = await watch(page);
+    await authored(page, '<p id="pod-tabs-authored" style="visibility: visible">Ready for review</p>'
+      + '<style>body { display: contents }</style>');
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') await held;
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    // The paragraph's box, as painted: one colour throughout, no text.
+    const box = await page.locator('#pod-tabs-authored').boundingBox();
+    expect(box).not.toBeNull();
+    const shot = (await page.screenshot({ clip: box! })).toString('base64');
+    const colours = await page.evaluate(async (data) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${data}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d') as CanvasRenderingContext2D;
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, image.width, image.height).data;
+      const seen = new Set<string>();
+      for (let at = 0; at < pixels.length; at += 4) seen.add(pixels.slice(at, at + 4).join(','));
+      return seen.size;
+    }, shot);
+    expect(colours).toBe(1);
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    release();
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 15000 });
+    await expectActive(page, ARTICLE);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod the failsafe has shown stays shown until its index, answering late, replaces it', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The index's answer held past the head's failsafe, and the index
+    // document after it a second more.
+    await page.route((url) => url.pathname === '/', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, route.request().resourceType() === 'fetch' ? 5000 : 1000));
+      await route.continue();
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(strip(page)).toHaveCount(1, { timeout: 15000 });
+    await expectActive(page, ARTICLE);
+    const bare = (await samples(page)).filter((each) => each.path === `/${ARTICLE.name}.html`);
+    const shown = bare.findIndex((each) => each.article);
+    expect(shown).toBeGreaterThan(0);
+    expect(bare.slice(shown).filter((each) => !each.article)).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a pod whose index never answers is shown by the failsafe, its autofocused control focused', async ({ page }) => {
+    await authored(page, AUTOFOCUSED);
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.continue();
+      await new Promise(() => {});
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect(page.locator('main.artifact h1')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#pod-tabs-autofocus')).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
+
+  test('a pod whose move to its index is stopped is shown again', async ({ page }) => {
+    // The index document never answers, and the reader stops its load half
+    // a second after it starts, the pod still hidden then.
+    await page.addInitScript(() => {
+      if (window.top !== window) return;
+      const going = setInterval(() => {
+        if (!document.documentElement?.classList.contains('pod-tabs-going')) return;
+        clearInterval(going);
+        setTimeout(() => {
+          const heading = document.querySelector('main.artifact h1');
+          sessionStorage.setItem('pod-tabs-stopped-hidden', String(!heading?.checkVisibility(
+            { visibilityProperty: true, opacityProperty: true })));
+          window.stop();
+        }, 500);
+      }, 10);
+    });
+    await page.route((url) => url.pathname === '/', async (route) => {
+      if (route.request().resourceType() === 'fetch') return route.continue();
+      await new Promise(() => {});
+    });
+    await page.goto(`/${ARTICLE.name}.html`);
+
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('pod-tabs-stopped-hidden')),
+      { timeout: 10000 }).toBe('true');
+    // Shown once the load stops, not on a fallback timer.
+    await expect(page.locator('main.artifact h1')).toBeVisible({ timeout: 2000 });
+    expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
+
+  test('the index opened at a pod\'s tab paints none of its listing before the frame shows the pod; with no tab named, its listing', async ({ page }) => {
+    const errors = await watch(page);
+    await sampleFrames(page);
+    // The index script held long enough for the listing to paint many frames,
+    // and well inside the head's failsafe.
+    await page.route('**/lotuspod-index.js*', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    });
+    await page.goto(`/#tabs=${ARTICLE.name}&on=${ARTICLE.name}`);
+
+    await expectActive(page, ARTICLE);
+    await expect(framed(page, ARTICLE).locator('h1')).toBeVisible();
+    await expect.poll(async () => (await samples(page)).some((each) => each.framed)).toBe(true);
+    const seen = await samples(page);
+    const shown = seen.findIndex((each) => each.framed);
+    expect(shown).toBeGreaterThan(0);
+    expect(seen.slice(0, shown).filter((each) => each.listing)).toEqual([]);
+    await expect(page.locator('html')).not.toHaveClass(/pod-tabs-opening/);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // The listing shows when the address names no tab, or none it lists.
+    for (const address of ['/', '/#pages', '/#tabs=pod-tabs-nowhere&on=pod-tabs-nowhere']) {
+      await page.goto('about:blank');
+      await page.goto(address);
+      await expect(strip(page)).toHaveCount(1);
+      // Shown once the index script has run, not on the head's failsafe.
+      expect(await page.locator('.index-table').isVisible()).toBe(true);
+      await expectListing(page);
+      await expect(page.locator('html')).not.toHaveClass(/pod-tabs-opening/);
+    }
+    expect(errors).toEqual([]);
+  });
+
   test('a pod loaded with ?standalone, or an old version of it, stays on its own at the top level', async ({ page }) => {
     const errors = await watch(page);
     await page.goto(`/${ARTICLE.name}.html?standalone#second-section`);
     await expect(page.locator('main.artifact h1')).toHaveText(ARTICLE.title);
+    // Shown at once, not on the head's failsafe.
+    expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
     // Its deferred page script has run by now, and has not left.
     await expect.poll(() => page.evaluate(() => document.readyState)).toBe('complete');
     await page.waitForTimeout(500);
     expect(new URL(page.url()).pathname).toBe(`/${ARTICLE.name}.html`);
+    expect(new URL(page.url()).search).toBe('?standalone');
     expect(new URL(page.url()).hash).toBe('#second-section');
     await expect(page.locator('.pod-tabs-bar')).toHaveCount(0);
     expect(errors).toEqual([]);
@@ -595,6 +954,8 @@ test.describe('signed in', () => {
       '--out-dir', OUT);
     await page.goto(`/${fresh.name}.html#a-section`);
     await stayed(new RegExp(`/${fresh.name}\\.html#a-section$`));
+    // Shown as soon as its page script stays, not on the head's failsafe.
+    expect(await page.locator('main.artifact h1').isVisible()).toBe(true);
     await page.waitForTimeout(500);
     await expect(page).toHaveURL(new RegExp(`/${fresh.name}\\.html#a-section$`));
 

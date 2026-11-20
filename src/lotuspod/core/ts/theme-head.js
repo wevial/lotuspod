@@ -17,6 +17,53 @@
   }
   var buttons = [];
 
+  // Before the body paints, the root is marked so HIDDEN hides what the
+  // reader would see only for a moment: a pod that may leave for its index's
+  // tab (the synchronous half of features/publish/ts/open-in-tabs.js, which
+  // removes LEAVING whenever the page stays and sets pod-tabs-going while it
+  // leaves), or the listing of an index opened at a tab (its script removes
+  // OPENING once the active tab shows or none can). FAILSAFE removes LEAVING or
+  // OPENING whatever happens, so a script that fails leaves no blank page.
+  //
+  // HIDDEN is written here, not in the theme's stylesheet, so it holds when
+  // that stylesheet fails to load. Layout and scripts run as ever. A pod is
+  // hidden by its root's opacity alone: no element is more opaque than the
+  // root, which always has a box, as a body with display: contents does
+  // not, and the browser's autofocus, fragment focus and text-fragment
+  // scroll, which skip an element whose visibility is hidden, still find
+  // the pod's own, should it stay. Its layer, declared first in the head,
+  // makes its !important hold against the pod's own animations and its own
+  // !important rules, unlayered or in a layer of their own.
+  var LEAVING = "pod-tabs-leaving";
+  var OPENING = "pod-tabs-opening";
+  var FAILSAFE = 4000;
+  var HIDDEN = "@layer pod-tabs-hidden {" +
+    ".pod-tabs-leaving, .pod-tabs-going { opacity: 0 !important; }" +
+    ".pod-tabs-opening main.index { visibility: hidden !important; } }";
+  var marked = null;
+  try {
+    var visible = document.querySelector('meta[name="lotuspod:visible"]');
+    if (visible) {
+      var asked = new URLSearchParams(location.search);
+      if (window.top === window && (location.protocol === "http:" || location.protocol === "https:") &&
+          !asked.has("version") && !asked.has("standalone") &&
+          visible.content.trim().toLowerCase() === "true") marked = LEAVING;
+    } else if (/^#tabs=[^&]*&on=/.test(location.hash)) {
+      marked = OPENING;
+    }
+  } catch (error) {
+    marked = null;
+  }
+  if (marked) {
+    var hiding = document.createElement("style");
+    hiding.textContent = HIDDEN;
+    document.head.insertBefore(hiding, document.head.firstChild);
+    root.classList.add(marked);
+    setTimeout(function () {
+      root.classList.remove(marked);
+    }, FAILSAFE);
+  }
+
   function resolved() {
     if (choice !== "auto") return choice;
     return light.matches ? "dawn" : "night";
