@@ -711,13 +711,17 @@
       }
     });
 
-    // The room from the handle's top to the window's bottom, which the
-    // open panel keeps within so it does not lengthen the page.
+    // How far the open panel is raised so it ends GAP above the window's
+    // bottom: every entry in view, and the page no longer.
+    var GAP = 16;
     function fit() {
+      var lift = 0;
       if (wide() && !pinned && shown()) {
-        var room = document.documentElement.clientHeight - outline.getBoundingClientRect().top;
-        outline.style.setProperty("--outline-room", Math.max(0, room) + "px");
+        var raised = parseFloat(outline.style.getPropertyValue("--outline-lift")) || 0;
+        var bottom = outline.getBoundingClientRect().top + raised + outline.offsetHeight;
+        lift = Math.max(0, bottom - (document.documentElement.clientHeight - GAP));
       }
+      outline.style.setProperty("--outline-lift", lift + "px");
     }
 
     function sync() {

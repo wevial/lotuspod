@@ -525,7 +525,10 @@ header.artifact-header > .artifact-comment {
    artifact-outline--dismissed) where the pointer and focus stay. Pinned (the page script's pin,
    data-outline="pinned" on the root) it is a sticky rail beside a reading
    column. Measured against the page container rather than the viewport, the
-   same box --measure-full is figured from. */
+   same box --measure-full is figured from. A browser without :has() forms
+   no grid, so none of these rules applies there and it keeps the disclosure
+   above the prose. (The rules keep the container query's indent.) */
+@supports selector(:has(a)) {
 @container (min-width: 58rem) {
   .artifact-main:has(.artifact-outline) {
     align-items: start;
@@ -567,23 +570,21 @@ header.artifact-header > .artifact-comment {
      and the rail's hairline, scrollable itself if a long outline outgrows
      the screen. Its margin takes back its height, never more than the
      screen's, so the grid row keeps the body's height and nothing below it
-     moves; the page script's --outline-room, the room from its top to the
-     window's bottom, less a gap, its padding and border, keeps it from
-     lengthening the page, though never below the room for the handle and a
-     few entries, in a short window too. Hover left by a tap (the page script's artifact-outline--touched)
+     moves. Where it would run past the window's bottom (a short window, the
+     handle low on the page), the page script's --outline-lift raises it
+     until it ends above it, so every entry is in view and it does not
+     lengthen the page. Hover left by a tap (the page script's artifact-outline--touched)
      opens nothing. */
   :root:not([data-outline="pinned"]) .artifact-outline:is(:hover:not(.artifact-outline--touched), .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) {
     background: var(--color-night);
     border-color: var(--hairline);
     margin-bottom: -100vh;
-    max-height: max(
-      min(10rem, calc(100vh - var(--topbar-height) - 3rem)),
-      min(calc(100vh - var(--topbar-height) - 3rem), calc(var(--outline-room, 100vh) - 2.5rem))
-    );
+    max-height: calc(100vh - var(--topbar-height) - 3rem);
     overflow-y: auto;
     padding-bottom: 0.6rem;
     scrollbar-color: var(--hairline-strong) transparent;
     scrollbar-width: thin;
+    translate: 0 calc(-1 * var(--outline-lift, 0px));
     width: calc(var(--outline-rail) + var(--outline-handle));
   }
 
@@ -768,6 +769,7 @@ header.artifact-header > .artifact-comment {
   :root[data-outline="pinned"] .artifact-sections-all {
     margin: 0.75rem 0 0 1.15rem;
   }
+}
 }
 
 /* Body: a reading column. Measure is capped in ch so long-form prose keeps a

@@ -47,15 +47,16 @@ async function open(page: Page, address = ARTICLE) {
 }
 
 // hermes publishes the markdown as the page name, with comments and a
-// summary, so its header has a summary, an owner, the comments link and
-// the versions.
+// summary, in the article variant the capture article renders in, so its
+// header has a summary, an owner, the comments link and the versions.
 function publish(name: string, markdown: string) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-outline-rail-'));
   try {
     const file = path.join(dir, `${name}.md`);
     fs.writeFileSync(file, markdown, 'utf-8');
     const said = execFileSync(PYTHON, ['-m', 'lotuspod', 'publish', file, '--local', '--out-dir', OUT,
-      '--owner', OWNER, '--credential', HERMES, '--comments', '--summary', SUMMARY], {
+      '--owner', OWNER, '--credential', HERMES, '--comments', '--summary', SUMMARY,
+      '--variant', 'article'], {
       encoding: 'utf-8',
       env: { ...ENV, PYTHONPATH: SRC },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -516,21 +517,62 @@ test('a browser without :has() in matches() still opens the outline and starts t
 });
 
 test('in a short wide window the open outline keeps its handle and entries in view', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 280 });
+  const SHORT = { width: 1280, height: 280 };
+  await page.setViewportSize(SHORT);
   const errors = await open(page);
   const outline = page.locator('nav.artifact-outline');
   const list = outline.locator('.artifact-outline-list');
   // The pointer moved onto the handle where it is, the page not scrolled.
   const handle = await rect(outline.locator('.artifact-outline-summary'));
-  expect(handle.bottom).toBeLessThan(280);
+  expect(handle.bottom).toBeLessThan(SHORT.height);
   await page.mouse.move(handle.left + handle.width / 2, handle.top + handle.height / 2);
   await expect(list).toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  // Every entry, and the panel, within the window; the pointer still over it.
+  await expect.poll(async () => (await rect(outline)).bottom).toBeLessThanOrEqual(SHORT.height);
+  for (const link of await list.getByRole('link').all()) {
+    const at = await rect(link);
+    expect(at.top).toBeGreaterThanOrEqual(0);
+    expect(at.bottom).toBeLessThanOrEqual(SHORT.height);
+  }
   const panel = await rect(outline);
-  const first = await rect(list.getByRole('link').first());
-  expect(panel.height).toBeGreaterThan(100);
-  expect(first.bottom).toBeLessThanOrEqual(panel.bottom);
-  expect(first.top).toBeGreaterThanOrEqual(panel.top);
+  expect(panel.top).toBeLessThanOrEqual(handle.top + handle.height / 2);
+  await expect(list).toBeVisible();
+  // An entry goes to its section from there.
+  const entry = list.getByRole('link').last();
+  const href = (await entry.getAttribute('href'))!;
+  await entry.click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(href);
+  expect(errors).toEqual([]);
+});
+
+test('a browser without :has() keeps the disclosure, and hovering it moves nothing', async ({ page }) => {
+  // Every :has() in the theme unparsed, as there, and the page script's too.
+  await page.route((url) => url.pathname.endsWith('/lotuspod.css'), async (route) => {
+    const response = await route.fetch();
+    const css = (await response.text()).replaceAll(':has(', ':x-has(');
+    await route.fulfill({ response, body: css });
+  });
+  await page.addInitScript(() => {
+    const matches = Element.prototype.matches;
+    Element.prototype.matches = function (this: Element, selector: string) {
+      if (selector.includes(':has(')) throw new DOMException(`'${selector}' is not a valid selector`, 'SyntaxError');
+      return matches.call(this, selector);
+    };
+  });
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const summary = outline.locator('.artifact-outline-summary');
+  const body = page.locator('.artifact-body');
+  expect(await outline.evaluate((node) => getComputedStyle(node).position)).not.toBe('sticky');
+  await expect(summary).toHaveText('On this page');
+  expect((await rect(outline)).bottom).toBeLessThanOrEqual((await rect(body)).top);
+  const before = await rect(body);
+  await summary.hover();
+  expect(await rect(body)).toEqual(before);
+  await summary.click();
+  await expect(outline.locator('.artifact-outline-list')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
