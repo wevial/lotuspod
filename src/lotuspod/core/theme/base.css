@@ -335,8 +335,9 @@ header.artifact-header .artifact-versions-slot {
   margin: 0 0.35em;
 }
 
-/* The box for comments on the whole page reads as links in the line: its
-   count in the line's voice, what it offers in the links' blue. */
+/* The box for comments on the whole page reads as links in the line: with
+   no comments, the count in the line's voice and what it offers in the
+   links' blue; with threads, the whole line of their state in blue. */
 header.artifact-header > .artifact-comment {
   font-size: 0.9rem;
   line-height: 1.5;
@@ -368,6 +369,7 @@ header.artifact-header > .artifact-comment {
 }
 
 .artifact-header > .artifact-comment .artifact-comment-chip-act,
+.artifact-header > .artifact-comment > .artifact-comment-chip:not(.artifact-comment-chip--none) .artifact-comment-chip-text,
 .artifact-header > .artifact-comment > .artifact-comment-summary:not(.artifact-comment-chip) {
   color: var(--color-sky);
   text-decoration: underline;
@@ -376,6 +378,7 @@ header.artifact-header > .artifact-comment {
 }
 
 .artifact-header > .artifact-comment > .artifact-comment-summary:hover .artifact-comment-chip-act,
+.artifact-header > .artifact-comment > .artifact-comment-chip:not(.artifact-comment-chip--none):hover .artifact-comment-chip-text,
 .artifact-header > .artifact-comment > .artifact-comment-summary:not(.artifact-comment-chip):hover {
   color: var(--color-pale-sky);
   text-decoration-color: currentColor;
@@ -510,11 +513,11 @@ header.artifact-header > .artifact-comment {
    prose in reading order. Unpinned it is a handle, an outline icon named by
    the summary's text, sticky below the title bar in a column of its own; the
    body takes the room a rail would have, so tables, diagrams and code get
-   it. Pointer hover or keyboard focus within the handle (the page script's
-   artifact-outline--open, held while focus moves inside, since the focus
-   leaving the summary would hide the link it is moving to) opens the list
-   over the gutter and the body, without moving the body: the column is the
-   handle's width whatever the outline shows. Pinned (the page script's pin,
+   it. Pointer hover, keyboard focus within the handle, or a tap on it (the
+   page script's artifact-outline--open) opens the list over the gutter and
+   the body without moving the body: the column is the handle's width
+   whatever the outline shows. Escape closes it (the page script's
+   artifact-outline--dismissed) where the pointer and focus stay. Pinned (the page script's pin,
    data-outline="pinned" on the root) it is a sticky rail beside a reading
    column. Measured against the page container rather than the viewport, the
    same box --measure-full is figured from. */
@@ -554,7 +557,7 @@ header.artifact-header > .artifact-comment {
   /* Open, the panel is the rail drawn over the margin: the page's own ground
      and the rail's hairline, scrollable itself if a long outline outgrows
      the screen. */
-  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)) {
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) {
     background: var(--color-night);
     border-color: var(--hairline);
     max-height: calc(100vh - var(--topbar-height) - 3rem);
@@ -565,10 +568,15 @@ header.artifact-header > .artifact-comment {
     width: calc(var(--outline-rail) + var(--outline-handle));
   }
 
-  :root:not([data-outline="pinned"]) .artifact-outline:not(:hover, .artifact-outline--open, :has(:focus-visible)) :is(
+  /* Closed, what the panel holds is hidden out of flow. It hides a moment
+     after the panel closes, so focus leaving the summary for a link finds the
+     link still shown and can land on it, with or without the page script. */
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:not(:hover, .artifact-outline--open, :has(:focus-visible)), .artifact-outline--dismissed) :is(
     .artifact-outline-list, .artifact-sections-all, .artifact-outline-pin
   ) {
-    display: none;
+    position: absolute;
+    transition: visibility 0s linear 0.05s;
+    visibility: hidden;
   }
 
   .artifact-outline-disclosure {
@@ -616,7 +624,7 @@ header.artifact-header > .artifact-comment {
     position: absolute;
   }
 
-  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)) .artifact-outline-summary {
+  :root:not([data-outline="pinned"]) .artifact-outline:is(:hover, .artifact-outline--open, :has(:focus-visible)):not(.artifact-outline--dismissed) .artifact-outline-summary {
     color: var(--color-lavender);
   }
 

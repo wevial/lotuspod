@@ -426,13 +426,17 @@ class ArtifactTopbarTests(TempDirTestCase):
         self.assertIn("top: 0;", block.group(0))
 
         wide = css.split("@container (min-width: 58rem) {", 1)[1].split("\n}\n", 1)[0]
-        outline = re.search(r"\.artifact-outline \{(.*?)\n  \}", wide, re.DOTALL)
+        outline = re.search(r"\n  \.artifact-outline \{(.*?)\n  \}", wide, re.DOTALL)
         self.assertIsNotNone(outline)
         self.assertIn("top: calc(var(--topbar-height) + 1.5rem);", outline.group(1))
-        self.assertIn(
-            "max-height: calc(100vh - var(--topbar-height) - 3rem);", outline.group(1)
-        )
         self.assertNotIn("top: 1.5rem;", outline.group(1))
+        # Pinned as a rail, it is no taller than the window below the bar.
+        pinned = re.search(r':root\[data-outline="pinned"\] \.artifact-outline \{(.*?)\n  \}',
+                           wide, re.DOTALL)
+        self.assertIsNotNone(pinned)
+        self.assertIn(
+            "max-height: calc(100vh - var(--topbar-height) - 3rem);", pinned.group(1)
+        )
 
     def test_markup_differs_from_before_only_in_the_theme_version(self):
         """KO-236 is CSS alone: the page markup is untouched."""
@@ -1262,8 +1266,12 @@ class OutlineThemeTests(unittest.TestCase):
     def test_the_rail_sits_on_the_left_and_the_body_on_the_right(self):
         """KO-234: navigation comes before content in reading order."""
         self.assertIn(
-            "grid-template-columns: var(--outline-rail) minmax(0, 1fr);",
+            "grid-template-columns: var(--outline-handle) minmax(0, 1fr);",
             self.rule(".artifact-main:has(.artifact-outline)"),
+        )
+        self.assertIn(
+            "grid-template-columns: var(--outline-rail) minmax(0, 1fr);",
+            self.rule(':root[data-outline="pinned"] .artifact-main:has(.artifact-outline)'),
         )
         self.assertIn(
             "grid-area: 1 / 2;",

@@ -44,13 +44,15 @@ re-rendered. A heading that already carries an `id` keeps it.
 Those sections also become the page's own outline: one
 `<nav class="artifact-outline">` list of section links, placed above the body
 in the markup. The theme gives it two roles from that single list — on a wide
-page it sits in the empty gutter beside the reading column as a sticky rail
-(the prose keeps its measure; a full-width table stops at the rail rather than
-running under it), and on a narrow one it is a disclosure card above the
-prose. The markup ships collapsed, so a phone gets the article first and the
-outline on request; the wide rail is held open by the stylesheet, since the
-gutter it sits in costs the prose nothing. No script and no second copy of the
-links: the layout is a container query away.
+page it is a small handle in the left gutter, sticky below the title bar, and
+the body takes the width a rail would have. Hovering the handle, giving it
+keyboard focus or tapping it opens the list over the margin without moving the
+body; Escape closes it. A pin in the open list keeps the outline as a sticky
+rail beside the reading column instead (a full-width table then stops at the
+rail rather than running under it), remembered per browser. On a narrow page it
+is a disclosure card above the prose. The markup ships collapsed, so a phone
+gets the article first and the outline on request. No second copy of the links:
+the layout is a container query away, and the page script adds only the pin.
 
 Pass `--no-outline` to skip the ids and the outline list entirely.
 

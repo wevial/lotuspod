@@ -112,11 +112,21 @@ test('keyboard focus from the title bar opens the outline, and an entry goes to 
   const list = outline.locator('.artifact-outline-list');
   await expect(list).toBeHidden();
 
+  // The article fits the window; room below its end lets a section scroll
+  // to the top, as on a longer page.
+  await page.locator('.artifact-footer').evaluate((node) => { (node as HTMLElement).style.marginBottom = '2000px'; });
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
   // The title bar's last control, then Tab.
   await page.locator('.artifact-topbar button:visible').last().focus();
   await page.keyboard.press('Tab');
   await expect(handle).toBeFocused();
   await expect(list).toBeVisible();
+  // The summary reports the list it shows as expanded.
+  await expect(outline.locator('details.artifact-outline-disclosure')).toHaveJSProperty('open', true);
+  // Forward Tab reaches the pin first, then the entries.
+  await page.keyboard.press('Tab');
+  await expect(outline.getByRole('button', { name: 'Pin outline' })).toBeFocused();
 
   const entry = list.getByRole('link').last();
   const href = (await entry.getAttribute('href'))!;
@@ -129,7 +139,10 @@ test('keyboard focus from the title bar opens the outline, and an entry goes to 
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(href);
   const heading = page.locator(`[id="${decodeURIComponent(href.slice(1))}"]`);
-  await expect(heading).toBeInViewport();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const landed = await rect(heading);
+  expect(landed.top).toBeGreaterThanOrEqual(0);
+  expect(landed.top).toBeLessThan(120);
 
   // Focus moved out, the outline closes.
   await page.locator('.artifact-topbar-title').focus();
@@ -242,5 +255,99 @@ test('on a phone the outline is the disclosure above the prose, and nothing scro
   await open(page, '/capture-owned.html?standalone');
   await expect(page.locator('header.artifact-header .artifact-owner')).toBeVisible();
   expect(await scroll()).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test('Escape closes the open outline where the pointer and focus stay', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const handle = outline.locator('.artifact-outline-summary');
+  const list = outline.locator('.artifact-outline-list');
+
+  await handle.hover();
+  await expect(list).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(list).toBeHidden();
+  // Leaving and coming back opens it again.
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+  await handle.hover();
+  await expect(list).toBeVisible();
+  await page.mouse.move(WIDE.width - 40, WIDE.height - 40);
+
+  await page.locator('.artifact-topbar button:visible').last().focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(list.getByRole('link').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(list).toBeHidden();
+  await expect(handle).toBeFocused();
+  await expect(outline.locator('details.artifact-outline-disclosure')).toHaveJSProperty('open', false);
+  // Tab from the handle opens it again.
+  await page.keyboard.press('Tab');
+  await expect(list).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true });
+
+  test('a tap on the handle opens the outline, an entry goes to its section, and a tap elsewhere closes it', async ({ page }) => {
+    await page.setViewportSize(WIDE);
+    const errors = await open(page);
+    const outline = page.locator('nav.artifact-outline');
+    const list = outline.locator('.artifact-outline-list');
+    await expect(list).toBeHidden();
+    await outline.locator('.artifact-outline-summary').tap();
+    await expect(list).toBeVisible();
+    const entry = list.getByRole('link').first();
+    const href = (await entry.getAttribute('href'))!;
+    await entry.tap();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe(href);
+    // A tap elsewhere closes it.
+    await page.touchscreen.tap(WIDE.width - 40, WIDE.height - 40);
+    await expect(list).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('without the page script', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('keyboard focus still opens the outline and reaches its entries', async ({ page }) => {
+    await page.setViewportSize(WIDE);
+    await page.goto(ARTICLE);
+    const outline = page.locator('nav.artifact-outline');
+    const list = outline.locator('.artifact-outline-list');
+    await expect(list).toBeHidden();
+    await page.locator('.artifact-topbar-title').focus();
+    await page.keyboard.press('Tab');
+    await expect(outline.locator('.artifact-outline-summary')).toBeFocused();
+    await expect(list).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(list.getByRole('link').first()).toBeFocused();
+    await expect(list).toBeVisible();
+  });
+});
+
+test('pinning measures the tables again, so none runs under the comments panel', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.fulfill({ json: { page: 'capture-tables', threads: [] } }));
+  const errors = await open(page, '/capture-tables.html?standalone');
+  const aside = page.locator('aside.artifact-comments-panel');
+  await aside.getByRole('button', { name: 'Comments', exact: true }).click();
+  await expect(aside.getByRole('button', { name: 'Fold comments' })).toBeVisible();
+  await expect.poll(async () => (await aside.boundingBox())!.width).toBeGreaterThan(300);
+  const widest = () => page.evaluate(() => Math.max(...Array.from(
+    document.querySelectorAll('.artifact-body table'), (node) => node.getBoundingClientRect().right)));
+  const panel = async () => (await rect(aside)).left;
+  await expect.poll(async () => (await widest()) <= (await panel())).toBe(true);
+
+  await page.locator('nav.artifact-outline .artifact-outline-summary').hover();
+  await page.locator('nav.artifact-outline').getByRole('button', { name: 'Pin outline' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-outline', 'pinned');
+  await expect.poll(async () => (await widest()) <= (await panel())).toBe(true);
   expect(errors).toEqual([]);
 });

@@ -637,12 +637,19 @@
   // over the margin, and pinned it is a column beside the body
   // (core/theme/base.css), as data-outline="pinned" on the root. The choice
   // is kept in this browser under OUTLINE; storage that refuses or throws
-  // reads as not pinned.
+  // reads as not pinned. Unpinned, hover and keyboard focus open the handle
+  // by CSS; here a tap opens it too (OPEN), as a touch screen has no hover,
+  // Escape closes it where the pointer and focus stay (DISMISSED), and the
+  // disclosure's open state follows what shows, so its summary reports it.
   var OUTLINE = "lotuspod:outline";
+  var OPEN = "artifact-outline--open";
+  var DISMISSED = "artifact-outline--dismissed";
 
   function pinOutline() {
     var outline = document.querySelector("nav.artifact-outline");
-    if (!outline) {
+    var disclosure = outline && outline.querySelector("details.artifact-outline-disclosure");
+    var summary = disclosure && disclosure.querySelector(":scope > summary");
+    if (!summary) {
       return;
     }
     var root = document.documentElement;
@@ -669,7 +676,26 @@
     path.setAttribute("stroke-linejoin", "round");
     icon.appendChild(path);
     pin.appendChild(icon);
-    outline.insertBefore(pin, outline.firstChild);
+    // Just after the summary, so Tab reaches it from the handle and the
+    // last link still leads straight to Collapse all and on to the body.
+    disclosure.insertBefore(pin, summary.nextSibling);
+
+    // The handle and its panel are the wide layout's alone: narrow, the
+    // disclosure is the reader's, as it was.
+    function wide() {
+      return getComputedStyle(outline).position === "sticky";
+    }
+
+    function shown() {
+      return !outline.classList.contains(DISMISSED) &&
+        outline.matches(":hover, ." + OPEN + ", :has(:focus-visible)");
+    }
+
+    function sync() {
+      if (wide() && !pinned && disclosure.open !== shown()) {
+        disclosure.open = shown();
+      }
+    }
 
     function show() {
       if (pinned) {
@@ -680,22 +706,78 @@
       pin.setAttribute("aria-pressed", String(pinned));
     }
 
-    // Keyboard focus opens the outline until focus leaves it: CSS alone
-    // would hide the list as focus left the summary for one of its links.
+    var pointer = "";
+    summary.addEventListener("pointerdown", function (event) {
+      pointer = event.pointerType;
+    });
+    summary.addEventListener("click", function (event) {
+      if (!wide()) {
+        return;
+      }
+      // Wide, the summary opens nothing itself: a tap opens or closes the
+      // panel, and a key or a click reopens one Escape closed.
+      event.preventDefault();
+      outline.classList.remove(DISMISSED);
+      if (pointer === "touch" || pointer === "pen") {
+        outline.classList.toggle(OPEN);
+      }
+      pointer = "";
+      sync();
+    });
+    outline.addEventListener("pointerenter", sync);
+    outline.addEventListener("pointerleave", function () {
+      outline.classList.remove(DISMISSED);
+      sync();
+    });
     outline.addEventListener("focusin", function (event) {
       if (event.target.matches(":focus-visible")) {
-        outline.classList.add("artifact-outline--open");
+        outline.classList.add(OPEN);
       }
+      sync();
     });
     outline.addEventListener("focusout", function (event) {
       if (!outline.contains(event.relatedTarget)) {
-        outline.classList.remove("artifact-outline--open");
+        outline.classList.remove(OPEN, DISMISSED);
+        setTimeout(sync, 0);
+      }
+    });
+    // A tap elsewhere closes a panel a tap opened, as does a tap on a link
+    // in it once the link has been followed.
+    document.addEventListener("pointerdown", function (event) {
+      if (!outline.contains(event.target) && outline.classList.contains(OPEN)) {
+        outline.classList.remove(OPEN);
+        sync();
+      }
+    });
+    outline.addEventListener("click", function (event) {
+      if (event.target.closest("a") && !event.target.matches(":focus-visible")) {
+        outline.classList.remove(OPEN);
+        setTimeout(sync, 0);
+      }
+    });
+    document.addEventListener("keydown", function (event) {
+      if (!wide() || pinned) {
+        return;
+      }
+      if (event.key === "Escape" && shown()) {
+        if (outline.contains(document.activeElement)) {
+          summary.focus({ preventScroll: true });
+        }
+        outline.classList.remove(OPEN);
+        outline.classList.add(DISMISSED);
+        sync();
+      } else if (event.key === "Tab" && outline.contains(document.activeElement)) {
+        outline.classList.remove(DISMISSED);
+        sync();
       }
     });
 
     pin.addEventListener("click", function () {
       pinned = !pinned;
       show();
+      if (!pinned) {
+        sync();
+      }
       try {
         if (pinned) {
           localStorage.setItem(OUTLINE, "pinned");
@@ -705,6 +787,9 @@
       } catch (ignored) {
         // Storage refused: the outline still pins, only unremembered.
       }
+      // The body moved: what is measured against it (the tables' room up to
+      // the comments panel) is measured again, as on a resize.
+      window.dispatchEvent(new Event("resize"));
     });
     show();
   }

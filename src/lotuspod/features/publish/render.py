@@ -504,10 +504,8 @@ def build_page(args: argparse.Namespace) -> argparse.Namespace:
         # A page stamped with a revision notices when it is published again,
         # a link off the site opens in a new tab, a diagram can be expanded
         # to fill the window, a calltree block folds, and a listed page
-        # loaded on its own opens in the index's tabs, and a wide page's
-        # outline can be pinned as a column.
+        # loaded on its own opens in the index's tabs.
         "page_script_needed": (not args.hidden or has_decisions or with_comments or wrapped
-                               or bool(outline)
                                or bool(widget_files) or has_node_tables or bool(refs_block)
                                or bool(getattr(args, "revision", "")) or has_link(body)
                                or has_mermaid_block(body) or has_calltree_block(body)),
