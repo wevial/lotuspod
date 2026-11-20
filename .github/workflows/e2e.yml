@@ -59,9 +59,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: trust the workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      # setup-python's interpreter has no ssl module inside this image, so use
+      # the image's own python3 from a venv.
+      - name: python
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends python3-venv
+          python3 -m venv /opt/venv
+          echo /opt/venv/bin >> "$GITHUB_PATH"
       - run: python -m pip install -e .
       - run: npm --prefix e2e ci --no-audit --no-fund
       - name: browser checks
