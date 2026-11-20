@@ -60,6 +60,8 @@
     return { index: index.pathname.replace(/\/index\.html$/, "/"), name: match[1] };
   }
 
+  var GONE = 30000;
+
   // Whether the index's listing has a row for the pod, with its link.
   function lists(html, name) {
     var listing = new DOMParser().parseFromString(html, "text/html");
@@ -69,7 +71,14 @@
       });
   }
 
-  return function (page) {
+  return function (run) {
+    // The page staying: shown again (the head's theme script hid it while it
+    // might go, core/ts/theme-head.js), then the rest run.
+    function page() {
+      document.documentElement.classList.remove("pod-tabs-leaving");
+      run();
+    }
+
     return function () {
       var there = candidate();
       if (there === null) {
@@ -94,6 +103,24 @@
           var fragment = "#tabs=" + name + "&on=" + name;
           if (location.hash.length > 1) {
             fragment += "&at=" + encodeURIComponent(location.hash.slice(1));
+          }
+          // Kept hidden while the index document loads, however long, past
+          // the head's failsafe, which removes pod-tabs-leaving alone; shown
+          // again once the load is stopped or fails, which the navigation
+          // API tells, or, in a browser without it, if this document is
+          // still here GONE milliseconds on. A page the failsafe has shown
+          // already stays shown until the index replaces it.
+          var root = document.documentElement;
+          if (root.classList.contains("pod-tabs-leaving")) {
+            var stayed = function () {
+              root.classList.remove("pod-tabs-leaving", "pod-tabs-going");
+            };
+            root.classList.add("pod-tabs-going");
+            if (window.navigation) {
+              window.navigation.addEventListener("navigateerror", stayed, { once: true });
+            } else {
+              setTimeout(stayed, GONE);
+            }
           }
           location.replace(there.index + fragment);
         }, function () {
