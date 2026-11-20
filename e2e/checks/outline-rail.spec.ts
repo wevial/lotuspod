@@ -47,8 +47,8 @@ async function open(page: Page, address = ARTICLE) {
 }
 
 // hermes publishes the markdown as the page name, with comments and a
-// summary, in the article variant the capture article renders in, so its
-// header has a summary, an owner, the comments link and the versions.
+// one-line summary, in the article variant the capture article renders in,
+// so its header has a summary, an owner, the comments link and the versions.
 function publish(name: string, markdown: string) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotuspod-outline-rail-'));
   try {
@@ -198,7 +198,9 @@ test('the header is the title, one meta line and the summary', async ({ page }) 
   for (const [key, value] of Object.entries({ ASSERTION, HERMES, OUT, PYTHON })) {
     expect(value, `the capture fixture names ${key}`).toBeTruthy();
   }
+  // Published twice, so the header carries its Versions link.
   publish(HEADED, HEADED_SOURCE);
+  publish(HEADED, `${HEADED_SOURCE}\nDrain the pump before it stops.\n`);
   await page.setViewportSize(WIDE);
   await page.route((url) => url.pathname === '/api/comments', (route) =>
     route.fulfill({ json: { page: HEADED, threads: [] } }));
@@ -213,6 +215,7 @@ test('the header is the title, one meta line and the summary', async ({ page }) 
 
   await expect(meta).toContainText('Created');
   await expect(versions).toHaveText(/^Versions · \d+$/);
+  expect(Number((await versions.textContent())!.split('·')[1])).toBeGreaterThanOrEqual(2);
   await expect(comments).toHaveText('No comments · Comment on this page');
   await expect(action).toHaveText('Comment on this page');
   await expect(action).toBeVisible();
