@@ -807,17 +807,31 @@
         sync();
       }
     });
+    // A pen that hovers clear of the screen is a pointer over what it hovers.
     document.addEventListener("pointermove", function (event) {
-      if (event.pointerType === "mouse" && outline.classList.contains(TOUCHED)) {
+      var hovering = event.pointerType === "mouse" || (event.pointerType === "pen" && event.buttons === 0);
+      if (hovering && outline.classList.contains(TOUCHED)) {
         outline.classList.remove(TOUCHED);
         sync();
       }
     });
     window.addEventListener("resize", sync);
     window.addEventListener("scroll", fit, { passive: true });
-    // Its entries changed in place (a live republish), the open panel is
-    // raised again for its new height. The lift is a translate, so fitting
-    // resizes nothing and does not call itself.
+    // Its entries changed in place, or the header above it (a live
+    // republish), the open panel is raised again for its new height and
+    // place. Asked as the page changes, before the next frame, the panel is
+    // still under the pointer that opened it: refitted later, a shorter
+    // panel left at the old lift would have moved off the pointer and
+    // closed. The lift is a translate, so fitting resizes nothing, and a
+    // style is no change watched here, so it does not call itself.
+    if (window.MutationObserver) {
+      new MutationObserver(function () {
+        if (!pinned && shown()) {
+          fit();
+        }
+      }).observe(outline.closest("main") || document.body,
+        { childList: true, subtree: true, characterData: true });
+    }
     if (window.ResizeObserver) {
       new ResizeObserver(fit).observe(outline);
     }

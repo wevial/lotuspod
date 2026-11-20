@@ -610,6 +610,128 @@ test('where ::details-content is not understood, the first hover in a short wind
   expect(errors).toEqual([]);
 });
 
+// A page of the named sections, under the title, for a live republish.
+function sectionsSource(title: string, headings: string[]) {
+  return [`# ${title}`, '', 'The pond, in winter.', '',
+    ...headings.flatMap((heading) => [`## ${heading}`, '', `${heading}: what the frost asks of it.`, ''])].join('\n');
+}
+
+const POND_PARTS = ['Pump', 'Heater', 'Fish', 'Ice', 'Reeds', 'Thaw', 'Lilies', 'Frogs', 'Liner', 'Drain', 'Net', 'Stones'];
+
+// Open a page published on the capture site with its clock stopped, so a
+// republish reaches it when the check moves the clock.
+async function openLive(page: Page, name: string, size: { width: number; height: number }) {
+  await page.setViewportSize(size);
+  await page.route((url) => url.pathname === '/api/comments', (route) =>
+    route.fulfill({ json: { page: name, threads: [] } }));
+  await stopClock(page);
+  return open(page, `/${name}.html?standalone`);
+}
+
+test('in a short wide window a live republish that drops entries keeps the outline open under a resting pointer', async ({ page }) => {
+  const name = 'outline-rail-live-fewer';
+  publish(name, sectionsSource('Outline rail live fewer', POND_PARTS.slice(0, 6)));
+  const SHORT = { width: 1280, height: 330 };
+  const errors = await openLive(page, name, SHORT);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const handle = await rect(outline.locator('.artifact-outline-summary'));
+  await page.mouse.move(handle.left + handle.width / 2, handle.top + handle.height / 2);
+  await expect(list).toBeVisible();
+  // The pointer rests low on the raised panel, below the handle's place.
+  const panel = await rect(outline);
+  const y = Math.floor(panel.bottom) - 6;
+  expect(y).toBeGreaterThan(handle.bottom);
+  await page.mouse.move(handle.left + handle.width / 2, y);
+  await expect(list).toBeVisible();
+
+  publish(name, sectionsSource('Outline rail live fewer', POND_PARTS.slice(0, 2)));
+  await page.clock.runFor(CHECK);
+  await expect(list.getByRole('link')).toHaveCount(2);
+  await page.waitForTimeout(300);
+  await expect(list).toBeVisible();
+  const after = await rect(outline);
+  expect(after.top).toBeLessThan(y);
+  expect(after.bottom).toBeGreaterThan(y);
+  expect(after.bottom).toBeLessThanOrEqual(SHORT.height);
+  expect(errors).toEqual([]);
+});
+
+test('a live republish that shortens the title moves the outline focus opened, and it stays in view', async ({ page }) => {
+  const name = 'outline-rail-live-title';
+  const long = 'Outline rail live title: what the pond needs before the first frost, who fits the heater, ' +
+    'when the pump comes out of the water, where it is kept until the thaw, and what the fish are fed meanwhile';
+  publish(name, sectionsSource(long, POND_PARTS));
+  const SIZE = { width: 1280, height: 430 };
+  const errors = await openLive(page, name, SIZE);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const title = await rect(page.locator('.artifact-title'));
+  expect(title.height).toBeGreaterThan(120);
+  // Tab from the title bar, past the header's links, to the handle.
+  const summary = outline.locator('.artifact-outline-summary');
+  await page.locator('.artifact-topbar button:visible').last().focus();
+  for (let n = 0; n < 10 && !(await summary.evaluate((node) => node === document.activeElement)); n += 1) {
+    await page.keyboard.press('Tab');
+  }
+  await expect(summary).toBeFocused();
+  await expect(list).toBeVisible();
+  const bar = (await rect(page.locator('.artifact-topbar'))).bottom;
+  expect((await rect(list.getByRole('link').first())).top).toBeGreaterThanOrEqual(bar);
+
+  publish(name, sectionsSource('Outline rail live title', POND_PARTS));
+  await page.clock.runFor(CHECK);
+  await expect(page.locator('.artifact-title')).toHaveText('Outline rail live title');
+  await expect(list).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect.poll(async () => (await rect(list.getByRole('link').first())).top).toBeGreaterThanOrEqual(bar);
+  expect((await rect(outline)).bottom).toBeLessThanOrEqual(SIZE.height);
+
+  // The title's text changed in place, as the swap changes it, with no
+  // scroll or resize after: the panel follows the handle each way.
+  for (const text of [long, 'Outline rail live title']) {
+    await page.locator('.artifact-title').evaluate((node, next) => { node.textContent = next; }, text);
+    await expect(list).toBeVisible();
+    await expect.poll(async () => (await rect(list.getByRole('link').first())).top).toBeGreaterThanOrEqual(bar);
+    await expect.poll(async () => (await rect(outline)).bottom).toBeLessThanOrEqual(SIZE.height);
+  }
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('a pen hovering the handle opens the outline again after a pen tap on the page', async ({ page }) => {
+  await page.setViewportSize(WIDE);
+  const errors = await open(page);
+  const outline = page.locator('nav.artifact-outline');
+  const list = outline.locator('.artifact-outline-list');
+  const handle = await rect(outline.locator('.artifact-outline-summary'));
+  const prose = await rect(page.locator('.artifact-body p').first());
+  const cdp = await page.context().newCDPSession(page);
+  const pen = (type: string, x: number, y: number, pressed = false) =>
+    cdp.send('Input.dispatchMouseEvent', {
+      type, x, y, pointerType: 'pen',
+      button: type === 'mouseMoved' && !pressed ? 'none' : 'left',
+      buttons: pressed ? 1 : 0, clickCount: type === 'mouseMoved' ? 0 : 1,
+    } as never);
+  const over = { x: handle.left + handle.width / 2, y: handle.top + handle.height / 2 };
+  const away = { x: WIDE.width - 40, y: WIDE.height - 40 };
+
+  await pen('mouseMoved', over.x, over.y);
+  await expect(list).toBeVisible();
+  await pen('mouseMoved', away.x, away.y);
+  await expect(list).toBeHidden();
+  // A tap on a paragraph, the pen lifted clear of it after.
+  await pen('mouseMoved', prose.left + 10, prose.top + 5);
+  await pen('mousePressed', prose.left + 10, prose.top + 5, true);
+  await pen('mouseReleased', prose.left + 10, prose.top + 5);
+  await expect(list).toBeHidden();
+  await pen('mouseMoved', over.x, over.y);
+  await expect(list).toBeVisible();
+  await pen('mouseMoved', away.x, away.y);
+  await expect(list).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('in a short wide window a live republish that adds entries raises the open outline again', async ({ page }) => {
   const name = 'outline-rail-live';
   const sections = (count: number) => [`# Outline rail live`, '', 'The pond, in winter.', '',
