@@ -725,7 +725,6 @@ header.artifact-header > .artifact-comment {
   /* In the gutter a card would read as a second surface competing with the
      header, so the rail is drawn as a hairline margin note. */
   :root[data-outline="pinned"] .artifact-outline {
-    background: none;
     border: 0;
     border-radius: 0;
     max-height: calc(100vh - var(--topbar-height) - 3rem);
